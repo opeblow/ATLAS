@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atlas-risk-model"
+version = "0.1.0"
+description = "FastAPI + PyTorch risk-prediction microservice for ATLAS (/score)."
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.29",
+  "pydantic>=2",
+  "numpy>=1.26",
+  "torch>=2.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.26"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
