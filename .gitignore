@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+__pypackages__/
+.venv/
+venv/
+*.pt
+!services/risk-model/app/artifacts/.gitkeep
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+
+# Local data & env
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite3
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Secrets that must never be committed
+*.pem
+*.key
+*.p12
+credentials.json
+
+# Logs
+*.log
+logs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Terraform
+infra/terraform/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
