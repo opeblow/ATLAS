@@ -15,7 +15,7 @@ provider "aws" {
 }
 
 locals {
-  name   = "atlas"
+  name = "atlas"
   common_tags = {
     Project   = "ATLAS"
     Service   = "Agentic Chief of Staff"
@@ -99,14 +99,14 @@ resource "aws_security_group" "lb" {
 # ------------------------------------------------------------------ database
 # DDL comes from services/common/atlas_common/schema.sql — apply once via psql.
 resource "aws_db_instance" "atlas" {
-  identifier          = "${local.name}-db"
-  engine              = "postgres"
-  engine_version      = "15.7"
-  instance_class      = var.db_instance_class
-  allocated_storage   = 20
-  db_name             = "atlas"
-  username            = var.db_user
-  password            = var.db_password
+  identifier             = "${local.name}-db"
+  engine                 = "postgres"
+  engine_version         = "15.7"
+  instance_class         = var.db_instance_class
+  allocated_storage      = 20
+  db_name                = "atlas"
+  username               = var.db_user
+  password               = var.db_password
   vpc_security_group_ids = [aws_security_group.services.id]
   db_subnet_group_name   = aws_db_subnet_group.atlas.name
   skip_final_snapshot    = true
@@ -131,30 +131,30 @@ resource "aws_ecs_cluster" "atlas" {
 
 locals {
   task_defs = {
-    risk        = { image = var.risk_image,  port = 8000 }
-    finance     = { image = var.finance_image, port = 8001 }
-    scheduling  = { image = var.scheduling_image, port = 8002 }
-    mcp         = { image = var.mcp_image,  port = 8003 }
+    risk       = { image = var.risk_image, port = 8000 }
+    finance    = { image = var.finance_image, port = 8001 }
+    scheduling = { image = var.scheduling_image, port = 8002 }
+    mcp        = { image = var.mcp_image, port = 8003 }
   }
 }
 
 resource "aws_ecs_task_definition" "atlas" {
-  for_each = local.task_defs
-  family   = "${local.name}-${each.key}"
-  network_mode = "awsvpc"
+  for_each                 = local.task_defs
+  family                   = "${local.name}-${each.key}"
+  network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu    = 512
-  memory = 1024
-  execution_role_arn = aws_iam_role.exec.name
-  task_role_arn      = aws_iam_role.task.name
+  cpu                      = 512
+  memory                   = 1024
+  execution_role_arn       = aws_iam_role.exec.name
+  task_role_arn            = aws_iam_role.task.name
   container_definitions = jsonencode([{
-    name  = each.key
-    image = each.value.image
+    name         = each.key
+    image        = each.value.image
     portMappings = [{ containerPort = each.value.port, protocol = "tcp" }]
     environment = concat(
       [{ name = "ATLAS_DATABASE_URL", value = "postgresql+psycopg2://${var.db_user}:${var.db_password}@${aws_db_instance.atlas.endpoint}/atlas" }],
       each.key == "finance" ? [{ name = "RISK_MODEL_URL", value = "http://atlas-risk:8000" }] : [],
-      each.key == "mcp"     ? [{ name = "ATLAS_REQUIRE_AUTH", value = "1" }] : []
+      each.key == "mcp" ? [{ name = "ATLAS_REQUIRE_AUTH", value = "1" }] : []
     )
     logConfiguration = {
       logDriver = "awslogs"
@@ -169,7 +169,7 @@ resource "aws_ecs_task_definition" "atlas" {
 }
 
 resource "aws_ecs_service" "atlas" {
-  for_each = local.task_defs
+  for_each               = local.task_defs
   name                   = "${local.name}-${each.key}"
   cluster                = aws_ecs_cluster.atlas.id
   task_definition        = aws_ecs_task_definition.atlas[each.key].arn
@@ -256,8 +256,8 @@ resource "aws_iam_role" "exec" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
       Principal = { Service = "ecs-tasks.amazonaws.com" }
     }]
   })
@@ -273,8 +273,8 @@ resource "aws_iam_role" "task" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
       Principal = { Service = "ecs-tasks.amazonaws.com" }
     }]
   })
