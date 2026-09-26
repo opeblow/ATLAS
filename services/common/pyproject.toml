@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atlas-common"
+version = "0.1.0"
+description = "Shared data layer for ATLAS services: SQLAlchemy models, config, audit logging."
+requires-python = ">=3.10"
+dependencies = [
+  "sqlalchemy>=2.0",
+  "psycopg2-binary>=2.9",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["atlas_common*"]
