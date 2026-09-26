@@ -1,0 +1,138 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: atlas-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: atlas_user
+      POSTGRES_PASSWORD: atlas_password
+      POSTGRES_DB: atlas_prod
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atlas_user -d atlas_prod"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: atlas-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  risk-model:
+    build:
+      context: ./services/risk-model
+      dockerfile: Dockerfile
+    container_name: atlas-risk-model
+    restart: always
+    environment:
+      - PORT=8000
+      - WORKERS=4
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  finance-service:
+    build:
+      context: ./services/finance-service
+      dockerfile: Dockerfile
+    container_name: atlas-finance-service
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      risk-model:
+        condition: service_healthy
+    environment:
+      - PORT=8001
+      - ATLAS_DATABASE_URL=postgresql://atlas_user:atlas_password@postgres:5432/atlas_prod
+      - RISK_MODEL_URL=http://risk-model:8000
+      - WORKERS=4
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  scheduling-service:
+    build:
+      context: ./services/scheduling-service
+      dockerfile: Dockerfile
+    container_name: atlas-scheduling-service
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - PORT=8002
+      - ATLAS_DATABASE_URL=postgresql://atlas_user:atlas_password@postgres:5432/atlas_prod
+      - WORKERS=4
+    ports:
+      - "8002:8002"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mcp-server:
+    build:
+      context: ./mcp-server
+      dockerfile: Dockerfile
+    container_name: atlas-mcp-server
+    restart: always
+    depends_on:
+      finance-service:
+        condition: service_healthy
+      scheduling-service:
+        condition: service_healthy
+    environment:
+      - PORT=8003
+      - FINANCE_SERVICE_URL=http://finance-service:8001
+      - SCHEDULING_SERVICE_URL=http://scheduling-service:8002
+      - WORKERS=4
+    ports:
+      - "8003:8003"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: atlas-dashboard
+    restart: always
+    depends_on:
+      - mcp-server
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_FINANCE_URL=http://localhost:8001
+      - NEXT_PUBLIC_SCHEDULING_URL=http://localhost:8002
+      - NEXT_PUBLIC_RISK_URL=http://localhost:8000
+      - NEXT_PUBLIC_MCP_URL=http://localhost:8003
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
