@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atlas-orchestrator"
+version = "0.1.0"
+description = "ATLAS reasoning layer: Bedrock/AgentCore tool-selection + response drafting (AWS Builder mini-challenge)."
+requires-python = ">=3.10"
+dependencies = [
+  "boto3>=1.34",
+  "httpx>=0.26",
+  "atlas-common>=0.1.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["orchestrator*"]
