@@ -41,6 +41,10 @@ jobs:
           cd ../../reasoning/bedrock-orchestrator
           python -m pytest tests -q
 
+      - name: Train the risk model (weights are gitignored, so CI trains them)
+        working-directory: services/risk-model
+        run: python -m app.train
+
       - name: Boot the stack (risk → finance → scheduling → mcp)
         run: |
           export ATLAS_DATABASE_URL=sqlite:///$GITHUB_WORKSPACE/atlas_ci.db
@@ -67,6 +71,9 @@ jobs:
           for p in 8000 8001 8002 8003; do
             curl -fsS "http://127.0.0.1:$p/health" || { echo "health check failed on $p"; cat /tmp/risk.log /tmp/finance.log /tmp/schedule.log /tmp/mcp.log; exit 1; }
           done
+          curl -fsS "http://127.0.0.1:8000/score/demo" >/dev/null || {
+            echo "risk model is up but cannot score - trained artifact missing?"; cat /tmp/risk.log; exit 1;
+          }
 
       - name: E2E — MCP integration suite (auth off)
         run: |
