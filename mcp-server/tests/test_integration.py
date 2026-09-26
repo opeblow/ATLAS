@@ -12,7 +12,6 @@ Then:  pytest tests/test_integration.py -s
 
 from __future__ import annotations
 
-import asyncio
 import httpx
 import pytest
 from mcp import ClientSession
@@ -120,13 +119,6 @@ async def _do_tool_calls() -> None:
             # 4. daily brief composes money + time
             brief = await _call_tool(session, "get_daily_brief", {"user_id": "u_demo"})
             assert "Good morning" in brief or "balance" in brief
-
-
-@pytest.fixture(scope="module")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest.mark.asyncio
