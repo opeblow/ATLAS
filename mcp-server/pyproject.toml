@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atlas-mcp-server"
+version = "0.1.0"
+description = "ATLAS: an agentic chief of staff MCP server (finance + scheduling) for Alexa+."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+  "fastmcp>=2.3,<5",
+  "httpx>=0.26",
+  "pydantic>=2",
+  "uvicorn[standard]>=0.29",
+  "atlas-common>=0.1.0",
+  "starlette>=0.37",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "mcp>=1.7"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["atlas_mcp_server*"]
+
+[project.scripts]
+atlas-mcp = "atlas_mcp_server.__main__:main"
