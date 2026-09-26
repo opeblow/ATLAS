@@ -25,7 +25,7 @@ variable "bedrock_model" {
   default = "amazon.nova-micro-v1:0"
 }
 
-variable "risk_image"    { default = "000000000000.dkr.ecr.us-east-1.amazonaws.com/atlas/risk-model" }
+variable "risk_image" { default = "000000000000.dkr.ecr.us-east-1.amazonaws.com/atlas/risk-model" }
 variable "finance_image" { default = "000000000000.dkr.ecr.us-east-1.amazonaws.com/atlas/finance-service" }
 variable "scheduling_image" { default = "000000000000.dkr.ecr.us-east-1.amazonaws.com/atlas/scheduling-service" }
-variable "mcp_image"     { default = "000000000000.dkr.ecr.us-east-1.amazonaws.com/atlas/mcp-server" }
+variable "mcp_image" { default = "000000000000.dkr.ecr.us-east-1.amazonaws.com/atlas/mcp-server" }
