@@ -32,7 +32,7 @@ jobs:
           pip install -e services/scheduling-service
           pip install -e mcp-server
           pip install -e reasoning/bedrock-orchestrator
-          pip install pytest httpx
+          pip install pytest pytest-asyncio httpx
 
       - name: Unit tests (no services required)
         run: |
