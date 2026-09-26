@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  backend:
+    name: backend · unit + e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install torch (CPU-only, smaller artifact)
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install ATLAS packages (editable)
+        run: |
+          pip install -e services/common
+          pip install -e services/risk-model
+          pip install -e services/finance-service
+          pip install -e services/scheduling-service
+          pip install -e mcp-server
+          pip install -e reasoning/bedrock-orchestrator
+          pip install pytest httpx
+
+      - name: Unit tests (no services required)
+        run: |
+          cd services/scheduling-service
+          python -m pytest tests -q
+          cd ../../reasoning/bedrock-orchestrator
+          python -m pytest tests -q
+
+      - name: Boot the stack (risk → finance → scheduling → mcp)
+        run: |
+          export ATLAS_DATABASE_URL=sqlite:///$GITHUB_WORKSPACE/atlas_ci.db
+          export ATLAS_REQUIRE_AUTH=0
+          cd services/risk-model
+          (nohup python -m uvicorn app.main:app --port 8000 --log-level warning >/tmp/risk.log 2>&1 &)
+          cd ../finance-service
+          (nohup python -m uvicorn app.main:app --port 8001 --log-level warning >/tmp/finance.log 2>&1 &)
+          cd ../scheduling-service
+          (nohup python -m uvicorn app.main:app --port 8002 --log-level warning >/tmp/schedule.log 2>&1 &)
+          cd ../../mcp-server
+          (nohup python -m uvicorn atlas_mcp_server.server:app --port 8003 --log-level warning >/tmp/mcp.log 2>&1 &)
+
+      - name: Wait for all four services
+        run: |
+          for i in $(seq 1 60); do
+            ok=1
+            for p in 8000 8001 8002 8003; do
+              if ! curl -fsS "http://127.0.0.1:$p/health" >/dev/null 2>&1; then ok=0; fi
+            done
+            [ "$ok" = "1" ] && break
+            sleep 2
+          done
+          for p in 8000 8001 8002 8003; do
+            curl -fsS "http://127.0.0.1:$p/health" || { echo "health check failed on $p"; cat /tmp/risk.log /tmp/finance.log /tmp/schedule.log /tmp/mcp.log; exit 1; }
+          done
+
+      - name: E2E — MCP integration suite (auth off)
+        run: |
+          cd mcp-server
+          python -m pytest tests -q
+
+  dashboard:
+    name: dashboard · typecheck + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install
+        working-directory: dashboard
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: dashboard
+        run: npm run typecheck
+
+      - name: Build
+        working-directory: dashboard
+        run: npm run build
+
+  terraform:
+    name: infra · validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.8.5"
+
+      - name: Format check
+        working-directory: infra/terraform
+        run: terraform fmt -check -recursive
+
+      - name: Validate
+        working-directory: infra/terraform
+        run: |
+          terraform init -backend=false
+          terraform validate
