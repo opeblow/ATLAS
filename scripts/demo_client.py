@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
+import sys
+import uuid
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 import httpx
 from mcp import ClientSession
@@ -14,6 +14,8 @@ from mcp.client.streamable_http import create_mcp_http_client, streamable_http_c
 
 
 async def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     base_url = os.getenv("ATLAS_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
     mcp_url = os.getenv("ATLAS_MCP_URL", f"{base_url}/mcp/mcp")
     user_id = "u_demo"
@@ -26,8 +28,8 @@ async def main() -> None:
         token.raise_for_status()
         headers["Authorization"] = f"Bearer {token.json()['token']}"
 
-    observed: dict[str, str] = {}
     now = datetime.now(timezone.utc)
+    run_id = uuid.uuid4().hex
     deadlines = [{
         "title": "AI Systems Assignment",
         "due_at": (now + timedelta(days=6)).isoformat(),
@@ -54,18 +56,19 @@ async def main() -> None:
                 text = "".join(item.text or "" for item in result.content if getattr(item, "type", None) == "text")
                 if result.is_error:
                     raise RuntimeError(f"{name} failed: {text}")
-                observed[name] = text
                 print(f"\n[{name}]\n{text}")
                 return text
 
             await call("assess_affordability", {"user_id": user_id, "amount_ngn": 120000, "category": "electronics"})
             await call("get_risk_snapshot", {"user_id": user_id, "window": "30d"})
-            await call("log_transaction", {
+            transaction = {
                 "user_id": user_id,
                 "amount_ngn": -45000,
                 "category": "food",
-                "idempotency_key": "atlas-demo-log-2026-10-02",
-            })
+                "idempotency_key": f"atlas-demo-log-{run_id}",
+            }
+            await call("log_transaction", transaction)
+            await call("log_transaction", transaction)
             await call("plan_study_week", {"user_id": user_id, "deadlines": deadlines, "available_hours": availability})
 
             async with httpx.AsyncClient(timeout=30) as client:
@@ -76,19 +79,14 @@ async def main() -> None:
                 })
                 plan.raise_for_status()
                 blocks = plan.json().get("proposed_blocks", [])
-            observed["plan_blocks"] = json.dumps(blocks)
-            await call("commit_schedule", {
+            commit = {
                 "user_id": user_id,
                 "blocks": blocks,
-                "idempotency_key": "atlas-demo-plan-2026-10-02",
-            })
+                "idempotency_key": f"atlas-demo-plan-{run_id}",
+            }
+            await call("commit_schedule", commit)
+            await call("commit_schedule", commit)
             await call("get_daily_brief", {"user_id": user_id})
-
-    output = Path(__file__).resolve().parents[1] / "video" / "observed.json"
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(observed, indent=2), encoding="utf-8")
-    print(f"\nObserved tool output written to {output}")
-
 
 if __name__ == "__main__":
     asyncio.run(main())

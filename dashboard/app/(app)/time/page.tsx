@@ -9,18 +9,25 @@ export default function Time() {
   const [dl, setDl] = useState<any[]>([]);
   const [blocks, setBlocks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      deadlines(DEFAULT_USER).catch(() => null),
-      schedule(DEFAULT_USER).catch(() => null),
-    ]).then(([d, s]) => {
-      if (cancelled) return;
-      setDl(d?.deadlines ?? []);
-      setBlocks(s?.blocks ?? []);
-      setLoading(false);
-    });
+    Promise.allSettled([deadlines(DEFAULT_USER), schedule(DEFAULT_USER)]).then(
+      ([d, s]) => {
+        if (cancelled) return;
+        setDl(d.status === "fulfilled" ? d.value?.deadlines ?? [] : []);
+        setBlocks(s.status === "fulfilled" ? s.value?.blocks ?? [] : []);
+        const failed = [
+          ...(d.status === "rejected" ? ["deadlines"] : []),
+          ...(s.status === "rejected" ? ["schedule"] : []),
+        ];
+        setLoadError(
+          failed.length ? `Live data unavailable for: ${failed.join(", ")}.` : null
+        );
+        setLoading(false);
+      }
+    );
     return () => {
       cancelled = true;
     };
@@ -35,6 +42,12 @@ export default function Time() {
         </div>
         <a href="/today" className="btn">← today</a>
       </div>
+
+      {loadError && (
+        <div role="alert" className="card" style={{ marginBottom: 16 }}>
+          <p className="muted">{loadError} Check the backend and refresh.</p>
+        </div>
+      )}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <h2>Committed blocks · next 7 days</h2>

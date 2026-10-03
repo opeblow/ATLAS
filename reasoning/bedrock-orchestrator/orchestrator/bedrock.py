@@ -11,6 +11,8 @@ credentials (the driver falls back to the rule-based router).
 
 from __future__ import annotations
 
+import os
+
 from orchestrator import executor
 from orchestrator.tools_spec import TOOLS_SPEC
 
@@ -30,7 +32,8 @@ def _client():
     try:
         import boto3
 
-        return boto3.client("bedrock-runtime", region_name="us-east-1")
+        region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "us-east-1"
+        return boto3.client("bedrock-runtime", region_name=region)
     except Exception as exc:  # no boto3, bad creds, etc.
         raise BedrockUnavailable(str(exc)) from exc
 
@@ -38,7 +41,7 @@ def _client():
 def think(
     utterance: str,
     user_id: str = "u_demo",
-    model: str = DEFAULT_MODEL,
+    model: str | None = None,
     session: executor.SessionMemory | None = None,
 ) -> dict:
     """Drive a single utterance through Bedrock; returns an answer object.
@@ -47,8 +50,9 @@ def think(
     Any Bedrock-side failure (no creds, quota, bad params) surfaces as
     BedrockUnavailable so the driver can fall back to the local router.
     """
-    memory = session or executor.SessionMemory()
+    memory = session or executor.SessionMemory(user_id=user_id)
     client = _client()  # may raise BedrockUnavailable -> driver falls back
+    model = model or os.getenv("ATLAS_BEDROCK_MODEL_ID", DEFAULT_MODEL)
 
     # Bedrock tool use plugs into the same input/output format as the MCP tools
     # but executes against REST directly; both stream identical audit rows.

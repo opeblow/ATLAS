@@ -2,7 +2,12 @@
 
 from datetime import datetime, timedelta
 
-from app.scheduler import BLOCK_HOURS, estimate_hours, plan_study_week
+from app.scheduler import (
+    BLOCK_HOURS,
+    estimate_hours,
+    plan_study_week,
+    select_non_overlapping,
+)
 
 WEEK = ["2026-09-24", "2026-09-25", "2026-09-26", "2026-09-27", "2026-09-28", "2026-09-29", "2026-09-30"]
 
@@ -95,3 +100,50 @@ def test_deadline_order_preferred():
     # the earliest deadline is staffed first (title keeps its "Study: " prefix)
     first_titles = [b["title"] for b in blocks[:3]]
     assert any("earlier" in t for t in first_titles)
+
+
+def test_commit_rejects_overlapping_proposals_in_same_request():
+    proposals = [
+        {
+            "title": "first",
+            "start_at": "2026-10-04T18:00:00+00:00",
+            "end_at": "2026-10-04T19:30:00+00:00",
+        },
+        {
+            "title": "overlap",
+            "start_at": "2026-10-04T19:00:00+00:00",
+            "end_at": "2026-10-04T20:00:00+00:00",
+        },
+        {
+            "title": "adjacent",
+            "start_at": "2026-10-04T19:30:00+00:00",
+            "end_at": "2026-10-04T20:30:00+00:00",
+        },
+    ]
+
+    accepted, conflicts = select_non_overlapping(proposals, [])
+
+    assert [block["title"] for block in accepted] == ["first", "adjacent"]
+    assert len(conflicts) == 1
+    assert conflicts[0]["block"] == "overlap"
+    assert conflicts[0]["overlaps"] == "first"
+
+
+def test_multiple_deadlines_share_windows_without_exceeding_daily_cap():
+    availability = [{"date": WEEK[0], "start_hour": 18, "end_hour": 23}]
+    deadlines = [
+        {"title": "First", "due_at": f"{WEEK[0]}T23:00:00", "weight": 0},
+        {"title": "Second", "due_at": f"{WEEK[0]}T23:00:00", "weight": 0},
+    ]
+
+    blocks, conflicts = plan_study_week(
+        deadlines, availability, max_hours_per_day=2.0
+    )
+
+    assert sum(
+        (datetime.fromisoformat(block["end_at"]) -
+         datetime.fromisoformat(block["start_at"])).total_seconds() / 3600
+        for block in blocks
+    ) <= 2.0
+    assert len(blocks) == 2
+    assert any(conflict["deadline"] == "Second" for conflict in conflicts)

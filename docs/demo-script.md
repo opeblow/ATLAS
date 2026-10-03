@@ -1,131 +1,70 @@
-# ATLAS — 7-minute live demo script
+# ATLAS — under-three-minute hackathon demo
 
-A guided walkthrough that tells the whole story: real ML risk scoring, safe
-voice retries, a genuine planner, reasoning with a cloud fallback, and a
-dashboard that shows the agent working. Everything runs locally on Windows.
+**Primary track:** Alexa+ (self-hosted Streamable HTTP MCP server).
+**Mini-challenge entries:** AWS Builder (Bedrock Converse integration) and Open
+Source (MIT-licensed repository; see the submission caveat below).
 
-## 0. Pre-flight (already true on this machine)
+Keep the recording under three minutes. Show the working interface and MCP
+calls; do not narrate unimplemented Alexa+ account linking, bank/calendar
+connectors, AgentCore hosting, production scale, or model accuracy.
 
-Five processes in one `ATLAS` shell:
+## Before recording
 
-```powershell
-# in atlas/  (the repo root)
-$env:ATLAS_DATABASE_URL = "sqlite:///C:\Users\USER\Documents\ATLAS\atlas\atlas.db"
-. .\scripts\dev.ps1        # boots risk-model 8000, finance 8001, scheduling 8002, mcp 8003
-npm run dev                # dashboard on 3000 (dashboard/)
-```
-
-Check the foundation is alive:
-```powershell
-Invoke-WebRequest http://127.0.0.1:8000/health   # risk model
-Invoke-WebRequest http://127.0.0.1:8003/health   # mcp gate
-```
-
----
-
-## Minute 0–1 — "The agent has a real model"
-
-Open `ATLAS` PowerShell:
-
-```
-python demo_client.py            # mcp-server/tests helper or minimal MCP client
-```
-
-Walk the **risk snapshot** tool — show that the score isn't a rule:
-  `get_risk_snapshot(u_demo)` → `0.09, low risk` + "income utilization lowers risk (impact −0.07)".
-
-Point the judge at the *why*: the model is a trained PyTorch MLP (val R² 0.959)
-served from its own service; the MCP server is just the mouthpiece. The factors
-are computed from the gradient — surfaced factors, not canned strings.
-
-## Minute 1–2 — "It judges affordability like an adviser"
-
-```
-assess_affordability(u_demo, amount_ngn=120_000, category='electronics')
-```
-
-- Verdict `safe`, risk moves `0.09 → 0.16`, balance `267,000`, "…you'd have about
-  135,000 NGN left over."
-- Now try `2,300,000` → verdict `blocked`. One model, two honest answers.
-- Optional: seed some spend then re-check — same tool, changed circumstances.
-
-**The trick worth showing:** the projection is deliberately *not* persisted, so
-asking "what if I buy this" never poisons the score history. That's the delta
-most naive demos skip.
-
-## Minute 2–3 — "Voice retries are safe"
-
-This is the demo's quiet flex. Call `log_transaction(u_demo, −45_000, 'food')`
-**or** `commit_schedule` with a stored `idempotency_key`, then call it again
-with the **same key**:
-
-- First call: recorded / blocks added.
-- Second call: `"already recorded"` / `"already committed"` no-op.
-
-Say it out loud: *"Alexa retries voice commands; idempotency keys make a retry a
-no-op instead of a double-spend or a double-booking."*
-
-## Minute 3–4 — "It turns deadlines into a calendar"
-
-```
-plan_study_week(u_demo, deadlines=[AI Systems Assignment w3, Math Midterm w2],
-                available_hours=[18:00–21:00 × 6 days])
-```
-- 15 proposed blocks, spaced across days (greedy spaced allocation), shown as a
-  plan, not a pile-up on day zero.
-- `commit_schedule(...)` → blocks land; a conflicting re-plan reports `conflicts`
-  instead of overwriting.
-
-Then switch to the dashboard tab for the **Time** screen and press *Generate
-plan* → *Commit*, pointing out the same JSON is rendered as UI.
-
-## Minute 4–5 — "Reasoning that never goes dark"
-
-Run the reasoning layer twice in a row:
+From the repository root, install the Python packages in the active environment:
 
 ```powershell
-python -m orchestrator --say "Can I afford a 120k laptop now?" --user u_demo
-python -m orchestrator --say "Good morning" --user u_demo
+python -m pip install -e .\services\common -e .\services\edge `
+  -e .\services\risk-model -e .\services\finance-service `
+  -e .\services\scheduling-service -e .\mcp-server `
+  -e .\reasoning\bedrock-orchestrator
 ```
 
-With no AWS credentials, it prints `[reasoning] Bedrock unavailable … using local
-fallback` and still answers correctly through the rule router. With Bedrock
-reachable, the same entry point does a two-turn `converse` tool-use loop against
-`amazon.nova-micro-v1:0`. Same `mcp_tool_calls` audit rows either way.
+In terminal 1, start the single-origin demo with a disposable local database:
 
-## Minute 5–6 — "The dashboard shows the agent working"
+```powershell
+$env:ATLAS_DATABASE_URL = "sqlite:///./atlas_demo.db"
+$env:ATLAS_REQUIRE_AUTH = "1"
+$env:ATLAS_SEED_ON_START = "1"
+$env:ATLAS_MOCK_BEDROCK = "1"
+python -m atlas_edge.asgi
+```
 
-Open `http://localhost:3000/`. Four screens, one story:
+Wait for `http://127.0.0.1:8000/edge/health` to return `{"status":"ok"}`.
+In terminal 2, start the dashboard:
 
-1. **Today** — balance, risk gauge (0.09 · low), trend line, today's blocks,
-   upcoming deadlines, shortcuts. Live from the services.
-2. **Money** — the can-I-afford-it box (type 120000 → see the model's verdict
-   inline), factor bars, ledger.
-3. **Time** — availability picker, plan generator, one-click commit, committed
-   calendar.
-4. **Agent Log** — every tool call from every door (MCP, fallback, dashboard)
-   with latency, auto-refreshing.
+```powershell
+cd dashboard
+npm ci
+$env:NEXT_PUBLIC_ATLAS_URL = "http://127.0.0.1:8000"
+npm run dev
+```
 
-## Minute 6–7 — "Fast-forward to production"
+Open `http://localhost:3000`. In terminal 3, the MCP walkthrough can be run
+with `python scripts/demo_client.py`. The service installs above include the
+MCP client dependency. Rehearse the browser and terminal transitions first.
 
-Flip to `docs/aws-integration.md` / the `infra/terraform` folder and land the
-mapping in under 60 seconds:
+## Recording beats
 
-- identical code on **RDS Postgres** (one env var; `schema.sql` already
-  partition-ready);
-- four **Fargate** tasks + ALB path `/mcp*`;
-- **Bedrock** `converse` as the hosted orchestrator, fallback router still there;
-- **AgentCore** hosts the Alexa+ skill over the self-hosted MCP server.
+| Time | Show | Say |
+|---|---|---|
+| 0:00–0:20 | Dashboard Today screen and seeded sample account | “ATLAS is a voice-first chief of staff for one everyday tension: deciding what you can spend while protecting time for what matters. This is a synthetic demo account.” |
+| 0:20–0:45 | MCP client initializes and lists the six tools; call `get_risk_snapshot` and `assess_affordability` | “Alexa+ can connect through the self-hosted MCP Streamable HTTP server. Affordability is a projection; it does not write to the ledger.” |
+| 0:45–1:10 | Call `log_transaction` twice with the same idempotency key; show first/duplicate result | “Voice clients retry. The ledger's database uniqueness rule makes this retry safe.” |
+| 1:10–1:35 | Generate a study plan, commit it, then show Time screen | “ATLAS turns deadlines and availability into a proposal; the user reviews it before committing.” |
+| 1:35–2:05 | Show the Agent Log and the dashboard's finance/time views | “The same backend powers the dashboard and MCP tools. The log makes the agent's actions inspectable.” |
+| 2:05–2:35 | Show `/api/capabilities` and the system-design diagram | “This run uses a local simulated language router, not a live Bedrock call. Bedrock Converse is implemented as an optional AWS path. Today’s hosted demo is a single edge process and SQLite, not a million-user deployment.” |
+| 2:35–2:55 | End on repository README and short call to action | “The next step is real identity and calendar/bank integrations, tested with user consent. Scores are experimental, based on synthetic training data, and not financial advice.” |
 
----
+## Submission checks
 
-## Dress-rehearsal gotchas
-
-- Restart order: `risk-model` → `finance` → `scheduling` → `mcp`. The MCP server
-  needs the two services; finance needs the model.
-- If the demo DB drifts too far from the script's numbers, re-seed:
-  `POST /demo/seed` on 8001 and 8002, then retrain or restart in order.
-- The gauge/balance numbers in minute 0 come from the ledger; a different seed
-  changes the words, not the narrative.
-- Keep the dashboard tab at `:3000` open before the demo — first paint compiles
-  on demand.
+- Record an English-language public YouTube or Vimeo video under 3 minutes.
+- Verify all six tools and retry behavior against a running stack; do not rely on
+  tests that skipped due to an unavailable server.
+- The Open Source mini-challenge requires a **new additional project** or a
+  contribution URL from the hackathon window. A license in this primary-track
+  repository by itself does not prove that additional entry.
+- Submit product feedback for each actually used Amazon tool/API/SDK. Clearly
+  distinguish a local simulated response from a Bedrock response; do not invent
+  onboarding experiences or product feedback that did not happen.
+- Provide the repository URL, GitHub username, chosen tracks, a clear summary
+  of changes made during the hackathon, and any required reviewer access.

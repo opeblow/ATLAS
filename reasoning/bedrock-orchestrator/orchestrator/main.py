@@ -19,7 +19,7 @@ FLAG_TOOL = {
 
 def run(utterance: str, user_id: str, force: str | None = None) -> dict:
     if force in FLAG_TOOL:
-        memory = executor.SessionMemory()
+        memory = executor.SessionMemory(user_id=user_id)
         result = executor.execute_tool(FLAG_TOOL[force], {"user_id": user_id}, memory)
         return {"front_door": "forced", "tool": FLAG_TOOL[force], "answer": str(result)[:400], "tool_output": result}
 

@@ -2,7 +2,13 @@
 
 Finance intelligence + academic/productivity scheduling, delivered as a self-hosted **MCP server** (Model Context Protocol, spec 2025-11-25+, Streamable HTTP transport) with a companion web command center dashboard.
 
-Built per the *Atlas System Design & Build Specification*. One agent, reachable by voice through Alexa+, holds a live model of your **money** and your **time**, and can act on both.
+Built as an Alexa+ self-hosted MCP experience, with an optional Bedrock
+orchestrator and a companion dashboard for a user's **money** and **time**.
+
+**Hackathon positioning:** primary track — Alexa+; mini-challenge candidates —
+AWS Builder and Open Source. The MCP server is the primary Alexa+ integration;
+the dashboard is a companion demo. See the demo and submission notes before
+claiming any live Amazon integration.
 
 ---
 
@@ -128,6 +134,21 @@ Access services:
 
 ---
 
+## Demo data and product limits
+
+The included `u_demo` profile and risk-model training data are synthetic. Risk
+scores are an experimental demonstration, not validated financial advice,
+credit scoring, or a recommendation to buy or borrow. The demo does not connect
+to bank accounts, calendars, or an Alexa+ customer identity.
+
+The hosted keyless demo intentionally exposes a shared synthetic profile and
+disables MCP bearer auth so judges can try it without setup. Do not enter real
+personal or financial data. Enabling MCP bearer auth alone does **not** secure
+the dashboard or the finance/scheduling HTTP APIs; production needs a real
+identity provider and authorization on every public API route.
+
+---
+
 ## Cloud deploy (no API keys)
 
 Backend on **Render**, dashboard on **Cloudflare Pages**, SQLite only. Full steps
@@ -164,14 +185,38 @@ with credentials to turn Bedrock back on.
 
 ## Quick start (Local Dev)
 
-Run the four services separately (finance 8001, scheduling 8002, risk 8000, MCP 8003):
+Recommended demo setup: one edge process mounts the services, with the
+dashboard in a second process. From the repository root, install the backend:
 
 ```powershell
-docker-compose up -d            # or run each uvicorn app in its own terminal
-
-# dashboard (in a second terminal)
-cd dashboard; npm install; npm run dev        # http://localhost:3000
+python -m pip install -e .\services\common -e .\services\edge `
+  -e .\services\risk-model -e .\services\finance-service `
+  -e .\services\scheduling-service -e ".\mcp-server[dev]" `
+  -e .\reasoning\bedrock-orchestrator
 ```
+
+Terminal 1:
+
+```powershell
+$env:ATLAS_DATABASE_URL = "sqlite:///./atlas_demo.db"
+$env:ATLAS_REQUIRE_AUTH = "1"
+$env:ATLAS_SEED_ON_START = "1"
+$env:ATLAS_MOCK_BEDROCK = "1"
+python -m atlas_edge.asgi
+```
+
+Terminal 2:
+
+```powershell
+cd dashboard
+npm ci
+$env:NEXT_PUBLIC_ATLAS_URL = "http://127.0.0.1:8000"
+npm run dev
+```
+
+Open `http://localhost:3000`. To exercise all MCP tools, including duplicate
+write retries, run `python scripts/demo_client.py` from a third terminal while
+the backend is running.
 
 ---
 

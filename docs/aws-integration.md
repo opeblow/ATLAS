@@ -65,7 +65,10 @@ Two modes, one interface (`orchestrator/executor.py`):
 
 - **Bedrock (primary).** `bedrock.converse` with the six `toolSpec`s, then a
   second turn to draft the reply. Model default `amazon.nova-micro-v1:0`
-  (cheap, structural output). Set the region/model via env.
+  (cheap, structural output). Configure the AWS region with `AWS_REGION` (or
+  `AWS_DEFAULT_REGION`) and optionally choose a model with
+  `ATLAS_BEDROCK_MODEL_ID`. The demo defaults to `us-east-1` and labels local
+  fallback replies as simulated.
 - **Fallback (offline/default).** Keyword intent router so the whole demo runs
   with zero AWS credentials and never hard-depends on the cloud.
 

@@ -1,6 +1,49 @@
 """Unit tests for the offline intent router (no services required)."""
 
-from orchestrator import fallback
+import sys
+from types import SimpleNamespace
+
+from atlas_common.config import settings
+from orchestrator import executor, fallback
+
+
+def test_last_plan_memory_is_isolated_per_user(tmp_path, monkeypatch):
+    monkeypatch.setattr(executor.tempfile, "tempdir", str(tmp_path))
+    alice_blocks = [{"title": "Alice's plan"}]
+
+    executor.SessionMemory(user_id="alice").remember_plan(
+        {"proposed_blocks": alice_blocks}
+    )
+
+    assert executor.SessionMemory(user_id="bob").plan_blocks() == []
+    assert executor.SessionMemory(user_id="alice").plan_blocks() == alice_blocks
+
+
+def test_bedrock_uses_configured_region_and_model(monkeypatch):
+    from orchestrator import bedrock
+
+    client_config: dict = {}
+    converse_calls: list[dict] = []
+
+    class FakeClient:
+        def converse(self, **kwargs):
+            converse_calls.append(kwargs)
+            return {"output": {"message": {"content": [{"text": "Ready."}]}}}
+
+    def fake_client(service_name: str, *, region_name: str):
+        client_config.update(service=service_name, region=region_name)
+        return FakeClient()
+
+    monkeypatch.setattr(settings, "mock_bedrock", False)
+    monkeypatch.setenv("AWS_REGION", "eu-west-1")
+    monkeypatch.setenv("ATLAS_BEDROCK_MODEL_ID", "amazon.example-model")
+    monkeypatch.setitem(sys.modules, "boto3", SimpleNamespace(client=fake_client))
+
+    result = bedrock.think("Good morning", user_id="test-user")
+
+    assert client_config == {"service": "bedrock-runtime", "region": "eu-west-1"}
+    assert converse_calls[0]["modelId"] == "amazon.example-model"
+    assert result["answer"] == "Ready."
 
 
 def test_classify_affordability():

@@ -184,7 +184,7 @@ def _plan_args(user_id: str) -> dict:
 def think(utterance: str, user_id: str = "u_demo") -> dict:
     tool = classify(utterance)
     args = _ARGS[tool](utterance, user_id)
-    memory = executor.SessionMemory()
+    memory = executor.SessionMemory(user_id=user_id)
     result = executor.execute_tool(tool, args, memory)
     answer = _draft(tool, result)
     return {

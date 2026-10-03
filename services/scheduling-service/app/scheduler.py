@@ -8,7 +8,7 @@ when availability can't cover the estimated effort.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 DEFAULT_MAX_HOURS_PER_DAY = 4.0
@@ -71,7 +71,9 @@ def plan_study_week(
         title = deadline.get("title", "Study")
 
         windows = [w for w in availability if _window_before(w, due_at)]
-        windows = _to_hour_windows(windows, due_at)
+        windows = _remaining_windows(
+            _to_hour_windows(windows, due_at), blocks, max_hours_per_day
+        )
         if not windows:
             conflicts.append(
                 {
@@ -138,6 +140,88 @@ def commit_as_conflicts(proposed: list[dict], committed: list[dict]) -> list[dic
                     }
                 )
     return conflicts
+
+
+def select_non_overlapping(
+    proposed: list[dict], committed: list[dict]
+) -> tuple[list[dict], list[dict]]:
+    """Keep the first non-overlapping proposals and report all later conflicts."""
+    accepted: list[dict] = []
+    conflicts: list[dict] = []
+    occupied = list(committed)
+    for block in proposed:
+        block_conflicts = commit_as_conflicts([block], occupied)
+        if block_conflicts:
+            conflicts.extend(block_conflicts)
+            continue
+        accepted.append(block)
+        occupied.append(block)
+    return accepted, conflicts
+
+
+def _remaining_windows(
+    windows: list[dict], occupied: list[dict], max_hours_per_day: float
+) -> list[dict]:
+    """Subtract proposed blocks and daily limits so deadlines share availability."""
+    remaining: list[dict] = []
+    daily_capacity: dict[object, float] = {}
+    for block in occupied:
+        start = _aware(_as_dt(block["start_at"]))
+        end = _aware(_as_dt(block["end_at"]))
+        day = start.date()
+        daily_capacity[day] = daily_capacity.get(day, max_hours_per_day) - (
+            end - start
+        ).total_seconds() / 3600
+    busy = sorted(
+        (
+            (_aware(_as_dt(block["start_at"])), _aware(_as_dt(block["end_at"])))
+            for block in occupied
+        ),
+        key=lambda interval: interval[0],
+    )
+    for window in windows:
+        start = window["start"]
+        end = start + timedelta(hours=window["hours"])
+        cursor = start
+        for busy_start, busy_end in (
+            (_in_timezone(start, busy_start), _in_timezone(start, busy_end))
+            for busy_start, busy_end in busy
+        ):
+            if busy_end <= cursor or busy_start >= end:
+                continue
+            if busy_start > cursor:
+                free_end = min(busy_start, end)
+                free_hours = min(
+                    (free_end - cursor).total_seconds() / 3600,
+                    daily_capacity.get(cursor.date(), max_hours_per_day),
+                )
+                if free_hours > 0:
+                    remaining.append({"start": cursor, "hours": free_hours})
+                    daily_capacity[cursor.date()] = (
+                        daily_capacity.get(cursor.date(), max_hours_per_day)
+                        - free_hours
+                    )
+            cursor = max(cursor, busy_end)
+            if cursor >= end:
+                break
+        if cursor < end:
+            free_hours = min(
+                (end - cursor).total_seconds() / 3600,
+                daily_capacity.get(cursor.date(), max_hours_per_day),
+            )
+            if free_hours > 0:
+                remaining.append({"start": cursor, "hours": free_hours})
+                daily_capacity[cursor.date()] = (
+                    daily_capacity.get(cursor.date(), max_hours_per_day)
+                    - free_hours
+                )
+    return remaining
+
+
+def _in_timezone(reference: datetime, value: datetime) -> datetime:
+    if reference.tzinfo is None:
+        return _aware(value).astimezone(timezone.utc).replace(tzinfo=None)
+    return _aware(value).astimezone(reference.tzinfo)
 
 
 def _to_hour_windows(availability: list[dict], due_at: datetime) -> list[dict]:

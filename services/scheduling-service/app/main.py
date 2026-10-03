@@ -29,7 +29,7 @@ from atlas_common.config import settings
 from atlas_common.db import get_session, init_db
 from atlas_common.models import Deadline, ScheduleBlock, User
 
-from app.scheduler import _aware, commit_as_conflicts, plan_study_week
+from app.scheduler import _aware, plan_study_week, select_non_overlapping
 
 app = FastAPI(title="ATLAS Scheduling Service", version="0.1.0")
 init_db()
@@ -182,21 +182,23 @@ def commit_schedule(inp: CommitIn, db: Session = Depends(get_session)) -> dict:
         )
         .all()
     )
-    conflicts = commit_as_conflicts([b.model_dump() for b in inp.blocks], [_block_json(b) for b in committed])
+    proposed = [block.model_dump() for block in inp.blocks]
+    for block in proposed:
+        if block["end_at"] <= block["start_at"]:
+            raise HTTPException(status_code=422, detail="end_at must be after start_at")
 
+    accepted, conflicts = select_non_overlapping(
+        proposed, [_block_json(block) for block in committed]
+    )
     added = 0
     saved: list[ScheduleBlock] = []
-    for block in inp.blocks:
-        if block.end_at <= block.start_at:
-            raise HTTPException(status_code=422, detail="end_at must be after start_at")
-        bs, be = _aware(block.start_at), _aware(block.end_at)
-        if any(bs < _aware(c.end_at) and _aware(c.start_at) < be for c in committed):
-            continue  # overlap -> skip, reported in conflicts
+    for block in accepted:
+        bs, be = _aware(block["start_at"]), _aware(block["end_at"])
         row = ScheduleBlock(
-            id=(block.id or str(uuid.uuid4())),
+            id=(block["id"] or str(uuid.uuid4())),
             user_id=inp.user_id,
-            deadline_id=block.deadline_id,
-            title=block.title,
+            deadline_id=block["deadline_id"],
+            title=block["title"],
             start_at=bs,
             end_at=be,
             status="committed",

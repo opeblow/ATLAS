@@ -17,11 +17,15 @@ type Row = {
 export default function LogPanel({ initial }: { initial: Row[] }) {
   const [rows, setRows] = useState<Row[]>(initial);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setBusy(true);
     try {
       setRows(((await audit(40)).rows ?? []) as Row[]);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not refresh the audit log.");
     } finally {
       setBusy(false);
     }
@@ -42,6 +46,8 @@ export default function LogPanel({ initial }: { initial: Row[] }) {
           ⟳ refresh
         </button>
       </div>
+
+      {error && <p role="alert" className="down">{error}</p>}
 
       <div className="card">
         {rows.length ? (

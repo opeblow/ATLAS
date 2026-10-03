@@ -75,10 +75,13 @@ async def _do_tool_calls() -> None:
     headers: dict[str, str] = {}
     if _auth_enforced():
         headers["Authorization"] = f"Bearer {_token()}"
-    http = create_mcp_http_client(headers=headers)
+    http = create_mcp_http_client(headers=headers    )
     async with streamable_http_client(MCP_URL, http_client=http) as (reader, writer):
         async with ClientSession(reader, writer) as session:
-            await session.initialize()
+            initialized = await session.initialize()
+            assert initialized.protocol_version >= "2025-11-25", (
+                f"MCP protocol {initialized.protocol_version} is older than required"
+            )
             tools = await session.list_tools()
             names = {t.name for t in tools.tools}
             assert {

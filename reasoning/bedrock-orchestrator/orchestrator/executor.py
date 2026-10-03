@@ -9,6 +9,7 @@ reuses the proposed blocks across CLI invocations.
 from __future__ import annotations
 
 import datetime
+import hashlib
 import json
 import os
 import tempfile
@@ -27,21 +28,23 @@ SCHEDULING_URL = settings.scheduling_url
 _TIMEOUT = httpx.Timeout(20.0)
 
 
-def _state_path() -> str:
+def _state_path(user_id: str) -> str:
     d = os.path.join(tempfile.gettempdir(), "atlas_state")
     os.makedirs(d, exist_ok=True)
-    return os.path.join(d, "latest_plan.json")
+    user_key = hashlib.sha256(user_id.encode("utf-8")).hexdigest()
+    return os.path.join(d, f"plan-{user_key}.json")
 
 
 @dataclass
 class SessionMemory:
+    user_id: str = "u_demo"
     last_plan: dict | None = None
     last_blocks: list | None = None
     logs: list = field(default_factory=list)
 
     def _load(self) -> None:
         try:
-            with open(_state_path(), "r", encoding="utf-8") as fh:
+            with open(_state_path(self.user_id), "r", encoding="utf-8") as fh:
                 data = json.load(fh)
             self.last_plan = data.get("plan")
             self.last_blocks = data.get("blocks") or []
@@ -51,11 +54,8 @@ class SessionMemory:
     def remember_plan(self, plan: dict) -> None:
         self.last_plan = plan
         self.last_blocks = plan.get("proposed_blocks")
-        try:
-            with open(_state_path(), "w", encoding="utf-8") as fh:
-                json.dump({"plan": plan, "blocks": self.last_blocks}, fh)
-        except Exception:
-            pass
+        with open(_state_path(self.user_id), "w", encoding="utf-8") as fh:
+            json.dump({"plan": plan, "blocks": self.last_blocks}, fh)
 
     def plan_blocks(self) -> list:
         if not self.last_blocks:

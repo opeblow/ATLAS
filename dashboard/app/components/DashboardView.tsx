@@ -32,6 +32,7 @@ export default function DashboardView() {
   const [schBrief, setSchBrief] = useState<any>(null);
   const [txList, setTxList] = useState<any[]>([]);
   const [dlList, setDlList] = useState<any[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Interactive Form States
   const [showTxModal, setShowTxModal] = useState(false);
@@ -51,18 +52,31 @@ export default function DashboardView() {
   async function loadData() {
     setLoading(true);
     try {
-      const [fb, sb, txRes, dlRes] = await Promise.all([
-        brief(DEFAULT_USER).catch(() => null),
-        timeBrief(DEFAULT_USER).catch(() => null),
-        transactions(DEFAULT_USER).catch(() => null),
-        deadlines(DEFAULT_USER).catch(() => null),
+      const results = await Promise.allSettled([
+        brief(DEFAULT_USER),
+        timeBrief(DEFAULT_USER),
+        transactions(DEFAULT_USER),
+        deadlines(DEFAULT_USER),
       ]);
-      setFinBrief(fb);
-      setSchBrief(sb);
-      setTxList(txRes?.transactions ?? []);
-      setDlList(dlRes?.deadlines ?? []);
-    } catch (e) {
-      console.error("Dashboard fetch error:", e);
+      const [finance, schedule, ledger, deadlinesResult] = results;
+      setFinBrief(finance.status === "fulfilled" ? finance.value : null);
+      setSchBrief(schedule.status === "fulfilled" ? schedule.value : null);
+      setTxList(ledger.status === "fulfilled" ? ledger.value?.transactions ?? [] : []);
+      setDlList(
+        deadlinesResult.status === "fulfilled"
+          ? deadlinesResult.value?.deadlines ?? []
+          : []
+      );
+      const failed = results.flatMap((result, index) =>
+        result.status === "rejected"
+          ? [["finance", "schedule", "transactions", "deadlines"][index]]
+          : []
+      );
+      setLoadError(
+        failed.length
+          ? `Live data unavailable for: ${failed.join(", ")}. Check the backend and retry.`
+          : null
+      );
     } finally {
       setLoading(false);
     }
@@ -204,16 +218,26 @@ export default function DashboardView() {
     }
   };
 
-  const balanceVal = finBrief?.balance_ngn ?? 242000;
-  const riskScore = finBrief?.risk_score ?? 0.12;
-  const spend7d = finBrief?.spend_7d_ngn ?? 85000;
+  const balanceVal: number | undefined = finBrief?.balance_ngn;
+  const riskScore: number | undefined = finBrief?.risk_score;
+  const spend7d: number | undefined = finBrief?.spend_7d_ngn;
   const blocks = schBrief?.today_blocks ?? [];
   const nextDeadlines = schBrief?.next_deadlines ?? dlList;
   const spendBars = compute7DaySpendBars();
   const categoryBreakdown = computeCategoryBreakdown();
 
-  const healthScore = Math.max(0, Math.min(100, Math.round((1 - riskScore) * 100)));
-  const healthLabel = riskScore < 0.4 ? "Good" : riskScore < 0.7 ? "Elevated Risk" : "High Risk";
+  const healthScore =
+    riskScore == null
+      ? null
+      : Math.max(0, Math.min(100, Math.round((1 - riskScore) * 100)));
+  const healthLabel =
+    riskScore == null
+      ? "Unavailable"
+      : riskScore < 0.4
+        ? "Good"
+        : riskScore < 0.7
+          ? "Elevated Risk"
+          : "High Risk";
 
   return (
     <div className="dash-body">
@@ -222,9 +246,12 @@ export default function DashboardView() {
         <div>
           <h1 className="dash-greeting-title">Good morning, Opeyemi</h1>
           <p className="dash-greeting-sub">
-            {finBrief
+            {finBrief && riskScore != null
               ? `Live Balance: ${ngn(balanceVal)} · Risk Score: ${riskScore.toFixed(2)}`
-              : "Here is what is happening today."}
+              : "Waiting for live account data."}
+          </p>
+          <p className="faint" style={{ fontSize: 12, marginTop: 4 }}>
+            Demo uses synthetic data. Risk scores are experimental, not financial advice.
           </p>
         </div>
 
@@ -246,6 +273,15 @@ export default function DashboardView() {
           </button>
         </div>
       </div>
+
+      {loadError && (
+        <div role="alert" className="card" style={{ marginBottom: 16 }}>
+          <p className="muted">{loadError}</p>
+          <button className="btn-demo-watch" onClick={loadData} disabled={loading}>
+            {loading ? "Refreshing…" : "Retry"}
+          </button>
+        </div>
+      )}
 
       {/* Idempotency Banner */}
       {idempotencyResult && (
@@ -293,9 +329,11 @@ export default function DashboardView() {
             <div className="kpi-icon-badge"><IconEye size={18} color="#ea580c" /></div>
             <div className="kpi-label">Total Balance</div>
           </div>
-          <div className="kpi-value">{ngn(balanceVal)}</div>
+          <div className="kpi-value">{balanceVal == null ? "—" : ngn(balanceVal)}</div>
           <div className="kpi-trend-row">
-            <span className="trend-up">↑ Live backend</span>
+            <span className={balanceVal == null ? "muted" : "trend-up"}>
+              {balanceVal == null ? "Unavailable" : "Live backend"}
+            </span>
             <svg viewBox="0 0 50 16" width="50" height="16">
               <path d="M0,12 Q12,2 25,10 T50,2" fill="none" stroke="#10b981" strokeWidth="2" />
             </svg>
@@ -308,7 +346,7 @@ export default function DashboardView() {
             <div className="kpi-icon-badge" style={{ background: "#fff7ed", color: "#ea580c" }}><IconWallet size={18} color="#ea580c" /></div>
             <div className="kpi-label">7-Day Spend</div>
           </div>
-          <div className="kpi-value">{ngn(spend7d)}</div>
+          <div className="kpi-value">{spend7d == null ? "—" : ngn(spend7d)}</div>
           <div className="kpi-trend-row">
             <span className="trend-down">Rolling window</span>
             <svg viewBox="0 0 50 16" width="50" height="16">
@@ -323,20 +361,26 @@ export default function DashboardView() {
             <div className="kpi-icon-badge"><IconShield size={18} color="#ea580c" /></div>
             <div className="kpi-label">Risk Score</div>
           </div>
-          <div className="kpi-value">{riskScore.toFixed(2)}</div>
+          <div className="kpi-value">{riskScore == null ? "—" : riskScore.toFixed(2)}</div>
           <div className="kpi-trend-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
-            <span style={{ color: riskScore > 0.6 ? "#ef4444" : "#10b981", fontSize: 11, fontWeight: 700 }}>
-              {healthLabel}
-            </span>
-            <div className="progress-track-bar" style={{ height: 4 }}>
-              <div
-                className="progress-fill-bar"
-                style={{
-                  width: `${Math.round(riskScore * 100)}%`,
-                  background: riskScore > 0.6 ? "#ef4444" : "#10b981",
-                }}
-              />
-            </div>
+            {riskScore == null ? (
+              <span className="muted">Unavailable</span>
+            ) : (
+              <>
+                <span style={{ color: riskScore > 0.6 ? "#ef4444" : "#10b981", fontSize: 11, fontWeight: 700 }}>
+                  {healthLabel}
+                </span>
+                <div className="progress-track-bar" style={{ height: 4 }}>
+                  <div
+                    className="progress-fill-bar"
+                    style={{
+                      width: `${Math.round(riskScore * 100)}%`,
+                      background: riskScore > 0.6 ? "#ef4444" : "#10b981",
+                    }}
+                  />
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -347,11 +391,11 @@ export default function DashboardView() {
             <div className="kpi-label">Next Deadline</div>
           </div>
           <div className="kpi-value" style={{ fontSize: 18, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-            {nextDeadlines[0]?.title ?? "Midterm Exam"}
+            {nextDeadlines[0]?.title ?? "No upcoming deadlines"}
           </div>
           <div className="kpi-trend-row">
             <span className="trend-up" style={{ color: "#ea580c" }}>
-              {nextDeadlines[0]?.due_at ? `${nextDeadlines[0].due_at.slice(0, 10)}` : "Due soon"}
+              {nextDeadlines[0]?.due_at ? nextDeadlines[0].due_at.slice(0, 10) : "No due date"}
             </span>
           </div>
         </div>
@@ -381,32 +425,9 @@ export default function DashboardView() {
                 </div>
               ))
             ) : (
-              <>
-                <div className="schedule-item">
-                  <span className="schedule-time">06:00</span>
-                  <div className="schedule-info">
-                    <div className="schedule-title">Deep Work Session</div>
-                    <div className="schedule-category">Project Atlas</div>
-                  </div>
-                  <span className="badge-status in-progress">In progress</span>
-                </div>
-                <div className="schedule-item">
-                  <span className="schedule-time">11:00</span>
-                  <div className="schedule-info">
-                    <div className="schedule-title">Team Standup</div>
-                    <div className="schedule-category">Engineering</div>
-                  </div>
-                  <span className="badge-status upcoming">Upcoming</span>
-                </div>
-                <div className="schedule-item">
-                  <span className="schedule-time">14:00</span>
-                  <div className="schedule-info">
-                    <div className="schedule-title">Financial Review</div>
-                    <div className="schedule-category">Budget & Investments</div>
-                  </div>
-                  <span className="badge-status upcoming">Upcoming</span>
-                </div>
-              </>
+              <p className="muted">
+                {loadError ? "Schedule unavailable." : "No blocks scheduled for today."}
+              </p>
             )}
           </div>
         </div>
@@ -448,7 +469,11 @@ export default function DashboardView() {
                 • Financial Health
               </span>
               <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-                {riskScore < 0.4 ? "You are doing great!" : "Exercise caution."}
+                {riskScore == null
+                  ? "Risk assessment unavailable."
+                  : riskScore < 0.4
+                    ? "Lower modeled risk."
+                    : "Review your financial position."}
               </div>
             </div>
           </div>
@@ -456,40 +481,50 @@ export default function DashboardView() {
           <div
             className="health-meter-container"
             role="img"
-            aria-label={`Financial health ${healthScore} out of 100. ${healthLabel}. Risk score ${(riskScore * 100).toFixed(0)} percent.`}
+            aria-label={
+              riskScore == null || healthScore == null
+                ? "Financial risk assessment unavailable."
+                : `Financial health ${healthScore} out of 100. ${healthLabel}. Modeled risk ${(riskScore * 100).toFixed(0)} percent.`
+            }
           >
-            <svg viewBox="0 0 160 90" className="health-gauge-svg">
-              <path
-                d="M 20 80 A 60 60 0 0 1 140 80"
-                fill="none"
-                stroke="#f1f5f9"
-                strokeWidth="12"
-                strokeLinecap="round"
-              />
-              <path
-                d="M 20 80 A 60 60 0 0 1 140 80"
-                fill="none"
-                stroke={riskScore > 0.6 ? "#ef4444" : "#10b981"}
-                strokeWidth="12"
-                strokeLinecap="round"
-                strokeDasharray={`${Math.round(healthScore * 1.85)} 200`}
-              />
-            </svg>
+            {riskScore == null || healthScore == null ? (
+              <p className="muted">No live risk score to display.</p>
+            ) : (
+              <>
+                <svg viewBox="0 0 160 90" className="health-gauge-svg">
+                  <path
+                    d="M 20 80 A 60 60 0 0 1 140 80"
+                    fill="none"
+                    stroke="#f1f5f9"
+                    strokeWidth="12"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M 20 80 A 60 60 0 0 1 140 80"
+                    fill="none"
+                    stroke={riskScore > 0.6 ? "#ef4444" : "#10b981"}
+                    strokeWidth="12"
+                    strokeLinecap="round"
+                    strokeDasharray={`${Math.round(healthScore * 1.85)} 200`}
+                  />
+                </svg>
 
-            <div className="health-score-val">{healthScore}</div>
-            <span
-              className="health-status-badge"
-              style={{
-                background: riskScore > 0.6 ? "#fef2f2" : "#ecfdf5",
-                color: riskScore > 0.6 ? "#ef4444" : "#10b981",
-              }}
-            >
-              {healthLabel}
-            </span>
+                <div className="health-score-val">{healthScore}</div>
+                <span
+                  className="health-status-badge"
+                  style={{
+                    background: riskScore > 0.6 ? "#fef2f2" : "#ecfdf5",
+                    color: riskScore > 0.6 ? "#ef4444" : "#10b981",
+                  }}
+                >
+                  {healthLabel}
+                </span>
 
-            <div className="health-trend-sub">
-              <span>Risk: {(riskScore * 100).toFixed(0)}%</span>
-            </div>
+                <div className="health-trend-sub">
+                  <span>Modeled risk: {(riskScore * 100).toFixed(0)}%</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -542,35 +577,9 @@ export default function DashboardView() {
                 </div>
               ))
             ) : (
-              <>
-                <div className="goal-item-row">
-                  <div className="goal-label-flex">
-                    <span className="goal-name-text">Rent</span>
-                    <span className="goal-amount-text">₦85,000 (45%)</span>
-                  </div>
-                  <div className="progress-track-bar" role="progressbar" aria-label="Rent spending" aria-valuemin={0} aria-valuemax={100} aria-valuenow={45}>
-                    <div className="progress-fill-bar" style={{ width: "45%" }} />
-                  </div>
-                </div>
-                <div className="goal-item-row">
-                  <div className="goal-label-flex">
-                    <span className="goal-name-text">Food</span>
-                    <span className="goal-amount-text">₦45,000 (24%)</span>
-                  </div>
-                  <div className="progress-track-bar" role="progressbar" aria-label="Food spending" aria-valuemin={0} aria-valuemax={100} aria-valuenow={24}>
-                    <div className="progress-fill-bar" style={{ width: "24%" }} />
-                  </div>
-                </div>
-                <div className="goal-item-row">
-                  <div className="goal-label-flex">
-                    <span className="goal-name-text">Transport</span>
-                    <span className="goal-amount-text">₦25,000 (13%)</span>
-                  </div>
-                  <div className="progress-track-bar" role="progressbar" aria-label="Transport spending" aria-valuemin={0} aria-valuemax={100} aria-valuenow={13}>
-                    <div className="progress-fill-bar" style={{ width: "13%" }} />
-                  </div>
-                </div>
-              </>
+              <p className="muted">
+                {loadError ? "Spending categories unavailable." : "No spending recorded yet."}
+              </p>
             )}
           </div>
         </div>
