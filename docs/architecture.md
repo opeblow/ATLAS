@@ -89,8 +89,10 @@ Two design details that matter:
   trust is what lets Alexa+ answer "why".
 - **Resilience.** Finance-service calls the model through a TTL cache (5 min
   live scores) + circuit breaker (5 straight failures → last-good snapshot for
-  5 min). A model that's down degrades the *freshness*, never the availability,
-  of the answer.
+  5 min). Hot reads use Redis when configured, with a 1.5 s process-local L1
+  cache and same-key miss coalescing. Redis errors are logged and fall back to
+  the local cache. A model that's down degrades the *freshness*, never the
+  availability, of the answer.
 
 Projections go through the model without being persisted (`persist=False`),
 so "what if I buy this" never pollutes the score history.
