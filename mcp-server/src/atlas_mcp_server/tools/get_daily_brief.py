@@ -32,8 +32,8 @@ def register(mcp: object) -> None:
             date = DateCls.today().isoformat()
 
         with timed_tool_call(user_id, "get_daily_brief", {"date": date}):
-            finance = clients.finance_get(f"/users/{user_id}/brief")
-            time_brief = clients.scheduling_get(f"/users/{user_id}/brief/{date}")
+            finance = await clients.finance_get_async(f"/users/{user_id}/brief")
+            time_brief = await clients.scheduling_get_async(f"/users/{user_id}/brief/{date}")
 
         risk = finance["risk_score"]
         loss = "low" if risk < 0.4 else "elevated" if risk < 0.7 else "high"

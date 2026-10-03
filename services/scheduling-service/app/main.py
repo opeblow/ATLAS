@@ -25,6 +25,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
+from atlas_common.config import settings
 from atlas_common.db import get_session, init_db
 from atlas_common.models import Deadline, ScheduleBlock, User
 
@@ -35,7 +36,7 @@ init_db()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=settings.cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

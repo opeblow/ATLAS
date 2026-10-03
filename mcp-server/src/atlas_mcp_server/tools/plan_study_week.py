@@ -34,7 +34,7 @@ def register(mcp: object) -> None:
             "available_hours": available_hours,
         }
         with timed_tool_call(user_id, "plan_study_week", payload):
-            result = clients.scheduling_post("/plan/week", payload)
+            result = await clients.scheduling_post_async("/plan/week", payload)
 
         blocks = result["proposed_blocks"]
         conflicts = result["conflicts"]

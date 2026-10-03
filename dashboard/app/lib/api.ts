@@ -1,7 +1,12 @@
-const FIN = process.env.NEXT_PUBLIC_FINANCE_URL || "http://127.0.0.1:8001";
-const SCH = process.env.NEXT_PUBLIC_SCHEDULING_URL || "http://127.0.0.1:8002";
-const RSK = process.env.NEXT_PUBLIC_RISK_URL || "http://127.0.0.1:8000";
-const MCP = process.env.NEXT_PUBLIC_MCP_URL || "http://127.0.0.1:8003";
+const ENV = process.env.NEXT_PUBLIC_ATLAS_URL || "";
+
+// In a deployed build the dashboard is static (Cloudflare Pages) and the backend
+// is a single public origin (atlas-edge on Render), so every call goes through
+// one base URL. In local dev the four services run on separate ports.
+const FIN = process.env.NEXT_PUBLIC_FINANCE_URL || (ENV ? `${ENV}/finance` : "http://127.0.0.1:8001");
+const SCH = process.env.NEXT_PUBLIC_SCHEDULING_URL || (ENV ? `${ENV}/schedule` : "http://127.0.0.1:8002");
+const RSK = process.env.NEXT_PUBLIC_RISK_URL || (ENV ? `${ENV}/risk` : "http://127.0.0.1:8000");
+const MCP = process.env.NEXT_PUBLIC_MCP_URL || (ENV ? `${ENV}/mcp` : "http://127.0.0.1:8003");
 
 export const DEFAULT_USER = "u_demo";
 
@@ -77,6 +82,26 @@ export const transactions = (user = DEFAULT_USER) => jget(`${FIN}/users/${user}/
 export const schedule = (user = DEFAULT_USER, status = "committed") => jget(`${SCH}/users/${user}/schedule?status=${status}`);
 export const deadlines = (user = DEFAULT_USER) => jget(`${SCH}/users/${user}/deadlines`);
 export const audit = (limit = 40) => jget(`${FIN}/audit/tool_calls?limit=${limit}`);
+
+// Which capabilities are live vs simulated. Lets the demo state its own
+// limitations instead of implying every external call is real.
+export const capabilities = () => jget(`${ENV}/api/capabilities`);
+
+export type AskReply = {
+  answer?: string;
+  tool?: string;
+  front_door?: string;
+  simulated?: boolean;
+  note?: string;
+  tool_output?: any;
+  error?: string;
+};
+
+// Single natural-language turn through the orchestrator. Identical to what the
+// MCP tool surface exposes; falls back to the rule-based router when Bedrock
+// credentials are absent, and the reply says so via `simulated`.
+export const ask = (utterance: string, user = DEFAULT_USER) =>
+  jpost(`${ENV}/api/ask`, { utterance, user_id: user });
 
 export const postTransaction = (user = DEFAULT_USER, amount_ngn: number, category = "general", idempotency_key?: string) =>
   jpost(`${FIN}/transactions`, {

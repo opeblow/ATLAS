@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   brief,
@@ -37,6 +37,7 @@ export default function DashboardView() {
   const [showTxModal, setShowTxModal] = useState(false);
   const [showDeadlineModal, setShowDeadlineModal] = useState(false);
   const [idempotencyResult, setIdempotencyResult] = useState<any>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   // Form inputs
   const [txAmount, setTxAmount] = useState("");
@@ -70,6 +71,39 @@ export default function DashboardView() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (!showTxModal && !showDeadlineModal) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href]'
+    );
+    focusable?.[0]?.focus();
+
+    const handleDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowTxModal(false);
+        setShowDeadlineModal(false);
+        return;
+      }
+      if (event.key !== "Tab" || !focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener("keydown", handleDialogKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleDialogKeyDown);
+      previousFocus?.focus();
+    };
+  }, [showTxModal, showDeadlineModal]);
 
   // Compute 7-day spend bars live from transactions
   const compute7DaySpendBars = () => {
@@ -328,7 +362,7 @@ export default function DashboardView() {
         {/* Column 1: Today's Schedule */}
         <div className="card-container">
           <div className="card-header-flex">
-            <h3 className="card-header-title">Today is Schedule</h3>
+            <h3 className="card-header-title">Today's schedule</h3>
             <Link href="/time" className="link-action-small">View all <IconArrowRight size={12} /></Link>
           </div>
 
@@ -419,7 +453,11 @@ export default function DashboardView() {
             </div>
           </div>
 
-          <div className="health-meter-container">
+          <div
+            className="health-meter-container"
+            role="img"
+            aria-label={`Financial health ${healthScore} out of 100. ${healthLabel}. Risk score ${(riskScore * 100).toFixed(0)} percent.`}
+          >
             <svg viewBox="0 0 160 90" className="health-gauge-svg">
               <path
                 d="M 20 80 A 60 60 0 0 1 140 80"
@@ -465,7 +503,11 @@ export default function DashboardView() {
             <span style={{ fontSize: 12, color: "#64748b" }}>Last 7 days</span>
           </div>
 
-          <div className="bar-chart-flex">
+          <div
+            className="bar-chart-flex"
+            role="img"
+            aria-label={`Spending over the last seven days: ${spendBars.map((bar) => `${bar.day}, ${bar.amount}`).join("; ")}`}
+          >
             {spendBars.map((bar) => (
               <div key={bar.day} className="bar-column-item">
                 <div
@@ -494,7 +536,7 @@ export default function DashboardView() {
                     <span className="goal-name-text" style={{ textTransform: "capitalize" }}>{item.category}</span>
                     <span className="goal-amount-text">{item.amount} ({item.pct}%)</span>
                   </div>
-                  <div className="progress-track-bar">
+                  <div className="progress-track-bar" role="progressbar" aria-label={`${item.category} spending`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={item.pct}>
                     <div className="progress-fill-bar" style={{ width: `${item.pct}%` }} />
                   </div>
                 </div>
@@ -506,7 +548,7 @@ export default function DashboardView() {
                     <span className="goal-name-text">Rent</span>
                     <span className="goal-amount-text">₦85,000 (45%)</span>
                   </div>
-                  <div className="progress-track-bar">
+                  <div className="progress-track-bar" role="progressbar" aria-label="Rent spending" aria-valuemin={0} aria-valuemax={100} aria-valuenow={45}>
                     <div className="progress-fill-bar" style={{ width: "45%" }} />
                   </div>
                 </div>
@@ -515,7 +557,7 @@ export default function DashboardView() {
                     <span className="goal-name-text">Food</span>
                     <span className="goal-amount-text">₦45,000 (24%)</span>
                   </div>
-                  <div className="progress-track-bar">
+                  <div className="progress-track-bar" role="progressbar" aria-label="Food spending" aria-valuemin={0} aria-valuemax={100} aria-valuenow={24}>
                     <div className="progress-fill-bar" style={{ width: "24%" }} />
                   </div>
                 </div>
@@ -524,7 +566,7 @@ export default function DashboardView() {
                     <span className="goal-name-text">Transport</span>
                     <span className="goal-amount-text">₦25,000 (13%)</span>
                   </div>
-                  <div className="progress-track-bar">
+                  <div className="progress-track-bar" role="progressbar" aria-label="Transport spending" aria-valuemin={0} aria-valuemax={100} aria-valuenow={13}>
                     <div className="progress-fill-bar" style={{ width: "13%" }} />
                   </div>
                 </div>
@@ -590,37 +632,33 @@ export default function DashboardView() {
 
       {/* Log Transaction Modal */}
       {showTxModal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15, 23, 42, 0.6)",
-            backdropFilter: "blur(4px)",
-            zIndex: 100,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          onClick={() => setShowTxModal(false)}
-        >
+        <div className="modal-overlay" onClick={() => setShowTxModal(false)}>
           <div
-            style={{ background: "#ffffff", borderRadius: 20, padding: 32, maxWidth: 440, width: "90%" }}
+            ref={dialogRef}
+            className="dashboard-dialog-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="transaction-dialog-title"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setShowTxModal(false);
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
+              <h3 id="transaction-dialog-title" style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
                 <IconWallet size={20} color="#ea580c" /> Log Transaction
               </h3>
-              <button onClick={() => setShowTxModal(false)} style={{ border: "none", background: "none", cursor: "pointer" }}>
+              <button type="button" aria-label="Close transaction dialog" onClick={() => setShowTxModal(false)} style={{ border: "none", background: "none", cursor: "pointer" }}>
                 <IconClose size={18} color="#64748b" />
               </button>
             </div>
             <form onSubmit={handleLogTransaction} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 4 }}>
+                <label htmlFor="transaction-amount" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 4 }}>
                   Amount (NGN)
                 </label>
                 <input
+                  id="transaction-amount"
                   type="number"
                   placeholder="e.g. 5000"
                   value={txAmount}
@@ -631,10 +669,11 @@ export default function DashboardView() {
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 4 }}>
+                <label htmlFor="transaction-category" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 4 }}>
                   Category
                 </label>
                 <select
+                  id="transaction-category"
                   value={txCategory}
                   onChange={(e) => setTxCategory(e.target.value)}
                   style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #e2e8f0" }}
@@ -662,37 +701,33 @@ export default function DashboardView() {
 
       {/* Create Deadline Modal */}
       {showDeadlineModal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15, 23, 42, 0.6)",
-            backdropFilter: "blur(4px)",
-            zIndex: 100,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          onClick={() => setShowDeadlineModal(false)}
-        >
+        <div className="modal-overlay" onClick={() => setShowDeadlineModal(false)}>
           <div
-            style={{ background: "#ffffff", borderRadius: 20, padding: 32, maxWidth: 440, width: "90%" }}
+            ref={dialogRef}
+            className="dashboard-dialog-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="deadline-dialog-title"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setShowDeadlineModal(false);
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
+              <h3 id="deadline-dialog-title" style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
                 <IconBook size={20} color="#ea580c" /> Create Deadline
               </h3>
-              <button onClick={() => setShowDeadlineModal(false)} style={{ border: "none", background: "none", cursor: "pointer" }}>
+              <button type="button" aria-label="Close deadline dialog" onClick={() => setShowDeadlineModal(false)} style={{ border: "none", background: "none", cursor: "pointer" }}>
                 <IconClose size={18} color="#64748b" />
               </button>
             </div>
             <form onSubmit={handleAddDeadline} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 4 }}>
+                <label htmlFor="deadline-title" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 4 }}>
                   Deadline Title
                 </label>
                 <input
+                  id="deadline-title"
                   type="text"
                   placeholder="e.g. Physics Midterm Exam"
                   value={dlTitle}
@@ -703,10 +738,11 @@ export default function DashboardView() {
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 4 }}>
+                <label htmlFor="deadline-date" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 4 }}>
                   Due Date
                 </label>
                 <input
+                  id="deadline-date"
                   type="date"
                   value={dlDate}
                   onChange={(e) => setDlDate(e.target.value)}

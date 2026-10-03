@@ -1,10 +1,19 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { audit } from "../../lib/api";
 import LogPanel from "../../components/LogPanel";
 
-export const dynamic = "force-dynamic";
+// Client-rendered for Cloudflare static export; see the note in money/page.tsx.
+export default function Log() {
+  const [rows, setRows] = useState<any[]>([]);
 
-export default async function Log() {
-  const data = await audit().catch(() => ({ rows: [] }));
+  useEffect(() => {
+    audit(40)
+      .then((d) => setRows(d?.rows ?? []))
+      .catch(() => setRows([]));
+  }, []);
+
   return (
     <div>
       <div className="pagehead">
@@ -14,7 +23,7 @@ export default async function Log() {
         </div>
         <a href="/today" className="btn">← today</a>
       </div>
-      <LogPanel initial={data.rows} />
+      <LogPanel initial={rows} />
     </div>
   );
 }

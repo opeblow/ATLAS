@@ -7,7 +7,12 @@ __pypackages__/
 .venv/
 venv/
 *.pt
+# The trained risk model is a ~5 KB deterministic artifact (fixed seeds in
+# app/train.py). It IS committed so keyless cloud deploys serve a working model
+# without a 250-epoch CPU training run at build time. Retrain with
+# `cd services/risk-model && python -m app.train` and commit the result.
 !services/risk-model/app/artifacts/.gitkeep
+!services/risk-model/app/artifacts/risk_mlp.pt
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

@@ -1,26 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  async rewrites() {
-    return [
-      {
-        source: "/api/finance/:path*",
-        destination: `${process.env.FINANCE_SERVICE_URL || "http://127.0.0.1:8001"}/:path*`,
-      },
-      {
-        source: "/api/scheduling/:path*",
-        destination: `${process.env.SCHEDULING_SERVICE_URL || "http://127.0.0.1:8002"}/:path*`,
-      },
-      {
-        source: "/api/risk/:path*",
-        destination: `${process.env.RISK_SERVICE_URL || "http://127.0.0.1:8000"}/:path*`,
-      },
-      {
-        source: "/api/mcp/:path*",
-        destination: `${process.env.MCP_SERVER_URL || "http://127.0.0.1:8003"}/:path*`,
-      },
-    ];
-  },
+  // Static export so the dashboard deploys to Cloudflare Pages (or any static
+  // host) with no Node runtime. Every data fetch is client-side, so nothing
+  // here needs a server. See docs/deployment.md.
+  output: "export",
+  // Emit /page.html so the static host serves clean URLs (/money, not /money/).
+  trailingSlash: true,
+  images: { unoptimized: true },
   compress: true,
   poweredByHeader: false,
   reactStrictMode: true,

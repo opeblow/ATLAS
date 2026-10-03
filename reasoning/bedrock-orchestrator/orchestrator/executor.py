@@ -20,8 +20,10 @@ from atlas_common.audit import timed_tool_call
 
 from orchestrator.tools_spec import tool_names
 
-FINANCE_URL = "http://127.0.0.1:8001"
-SCHEDULING_URL = "http://127.0.0.1:8002"
+from atlas_common.config import settings
+
+FINANCE_URL = settings.finance_url
+SCHEDULING_URL = settings.scheduling_url
 _TIMEOUT = httpx.Timeout(20.0)
 
 

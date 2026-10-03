@@ -95,6 +95,11 @@ def synthesize(n: int = 6000) -> tuple[np.ndarray, np.ndarray]:
                 "daily_spend_std_ngn": daily_std,
                 "income_received_30d": income > monthly * 0.8,
                 "projected_amount_ngn": projected,
+                # Sweep the seasonal feature across the full year. Leaving it
+                # frozen at today's value gave it zero training variance, which
+                # collapsed sigma to ~0 and let normalization explode at serve
+                # time (every risk score came back 0.00 with no factors).
+                "day_of_year": float(np.random.randint(1, 367)),
             }
         )
         rows.append(compute_features(agg).vector())

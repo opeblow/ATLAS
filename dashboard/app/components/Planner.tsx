@@ -1,6 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { jpost, DEFAULT_USER } from "../lib/api";
+
+const SCH_URL =
+  process.env.NEXT_PUBLIC_SCHEDULING_URL ||
+  (process.env.NEXT_PUBLIC_ATLAS_URL
+    ? `${process.env.NEXT_PUBLIC_ATLAS_URL}/schedule`
+    : "http://127.0.0.1:8002");
 
 const DAYS = Array.from({ length: 7 }, (_, i) => {
   const d = new Date();
@@ -39,12 +46,11 @@ export default function Planner({ deadlines }: { deadlines: Deadline[] }) {
     setPlan(null);
     setCommitMsg(null);
     try {
-      const r = await fetch("http://127.0.0.1:8002/plan/week", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ user_id: "u_demo", deadlines: deadlinePayload, available_hours: available }),
+      const j = await jpost(`${SCH_URL}/plan/week`, {
+        user_id: DEFAULT_USER,
+        deadlines: deadlinePayload,
+        available_hours: available,
       });
-      const j = await r.json();
       setPlan(j.proposed_blocks ?? []);
       if ((j.conflicts ?? []).length) setCommitMsg(`Plan has ${j.conflicts.length} conflicts.`);
     } catch (e: any) {
@@ -59,19 +65,15 @@ export default function Planner({ deadlines }: { deadlines: Deadline[] }) {
     setBusy(true);
     setCommitMsg(null);
     try {
-      const r = await fetch("http://127.0.0.1:8002/schedule/commit", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          user_id: "u_demo",
-          blocks: plan,
-          idempotency_key: crypto.randomUUID(),
-        }),
+      const j = await jpost(`${SCH_URL}/schedule/commit`, {
+        user_id: DEFAULT_USER,
+        blocks: plan,
+        idempotency_key: crypto.randomUUID(),
       });
-      const j = await r.json();
       const conflicts = (j.conflicts ?? []) as { block?: string }[];
+      const added = j.calendar_diff?.added ?? j.committed ?? 0;
       setCommitMsg(
-        `Locked in ${j.committed ?? 0} block(s).` +
+        `Locked in ${added} block(s).` +
           (conflicts.length ? ` ${conflicts.length} conflicted and were skipped.` : "")
       );
       setPlan(null);

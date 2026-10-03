@@ -22,6 +22,11 @@ class BedrockUnavailable(RuntimeError):
 
 
 def _client():
+    from atlas_common.config import settings
+
+    if settings.mock_bedrock:
+        raise BedrockUnavailable("ATLAS_MOCK_BEDROCK=1 (simulated mode)")
+
     try:
         import boto3
 

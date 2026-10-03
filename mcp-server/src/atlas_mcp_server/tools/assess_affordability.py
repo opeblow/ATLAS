@@ -35,7 +35,7 @@ def register(mcp: object) -> None:
             "assess_affordability",
             {"amount_ngn": amount_ngn, "category": category},
         ):
-            result = clients.finance_post(
+            result = await clients.finance_post_async(
                 "/assess/affordability",
                 {"user_id": user_id, "amount_ngn": amount_ngn, "category": category},
             )

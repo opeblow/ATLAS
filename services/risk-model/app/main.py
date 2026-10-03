@@ -28,6 +28,9 @@ class ScoreRequest(BaseModel):
     daily_spend_std_ngn: float = 0
     income_received_30d: bool = True
     projected_amount_ngn: float | None = None
+    # Overrides the seasonal feature so a caller can score a specific date
+    # (and so training can sweep the whole year). Defaults to today.
+    day_of_year: int | None = None
 
 
 class ScoreResponse(BaseModel):

@@ -24,7 +24,7 @@ def register(mcp: object) -> None:
         """
         enforce_identity(user_id)
         with timed_tool_call(user_id, "get_risk_snapshot", {"window": window}):
-            result = clients.finance_get(f"/users/{user_id}/risk", window=window)
+            result = await clients.finance_get_async(f"/users/{user_id}/risk", window=window)
         if result.get("stale"):
             note = " (based on the most recent snapshot we have — may be a few minutes old)"
         else:

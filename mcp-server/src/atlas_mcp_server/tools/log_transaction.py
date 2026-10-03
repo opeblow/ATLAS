@@ -46,7 +46,7 @@ def register(mcp: object) -> None:
             payload["idempotency_key"] = idempotency_key
 
         with timed_tool_call(user_id, "log_transaction", payload):
-            result = clients.finance_post("/transactions", payload)
+            result = await clients.finance_post_async("/transactions", payload)
 
         if result.get("duplicate"):
             prefix = "Duplicate — already logged, nothing changed."

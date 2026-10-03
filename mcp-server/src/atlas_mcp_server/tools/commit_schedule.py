@@ -33,7 +33,7 @@ def register(mcp: object) -> None:
             payload["idempotency_key"] = idempotency_key
 
         with timed_tool_call(user_id, "commit_schedule", payload):
-            result = clients.scheduling_post("/schedule/commit", payload)
+            result = await clients.scheduling_post_async("/schedule/commit", payload)
 
         diff = result.get("calendar_diff", {})
         conflicts = result.get("conflicts", [])

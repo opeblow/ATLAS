@@ -67,6 +67,9 @@ def compute_features(agg: dict) -> Features:
     daily_mean = spend_7d / 7.0 or 1.0
     income_received = bool(agg.get("income_received_30d", True))
     projected_amount = float(agg.get("projected_amount_ngn") or 0.0)
+    # Day-of-year is overridable so training can sweep the full range instead of
+    # freezing on the day the dataset was generated.
+    day_of_year = float(agg.get("day_of_year") or datetime.now().timetuple().tm_yday)
 
     total_7d = sum(float(v) for v in category_spend.values()) or spend_7d or 1.0
 
@@ -78,7 +81,8 @@ def compute_features(agg: dict) -> Features:
     overdraft_prox = max(0.0, min(1.0, 1.0 - (balance / (daily_mean * 3.0 + 1.0))))
     volatility = daily_std / (daily_mean + 1.0)
     utilization = min(3.0, (monthly_spend + 1.0) / (monthly_income + 1.0))
-    seasonal = datetime.now().timetuple().tm_yday / 365.0
+    # Smooth 0.5..1.0 over the year (see FEATURE_LABELS).
+    seasonal = day_of_year / 366.0
     # Purchase size relative to a stable, non-negative base (income), not
     # balance — balance can legitimately dip negative and would flip the sign.
     projected_ratio = (projected_amount / (monthly_income + 1.0)) if projected_amount > 0 else 0.0
@@ -120,6 +124,7 @@ def generate_aggregate_from_seed(seed: dict) -> dict:
         "daily_spend_std_ngn": 6_000,
         "income_received_30d": True,
         "projected_amount_ngn": 0,
+        "day_of_year": datetime.now().timetuple().tm_yday,
     }
     defaults.update(seed)
     return defaults

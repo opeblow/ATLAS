@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { ngn } from "../lib/api";
+import { jpost, ngn, DEFAULT_USER } from "../lib/api";
+
+const FIN_URL =
+  process.env.NEXT_PUBLIC_FINANCE_URL ||
+  (process.env.NEXT_PUBLIC_ATLAS_URL
+    ? `${process.env.NEXT_PUBLIC_ATLAS_URL}/finance`
+    : "http://127.0.0.1:8001");
 
 type Verdict = {
   verdict?: string;
@@ -22,12 +28,13 @@ export default function AffordabilityBox() {
     setBusy(true);
     setResult(null);
     try {
-      const r = await fetch("http://127.0.0.1:8001/assess/affordability", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ user_id: "u_demo", amount_ngn: Number(amount), category }),
-      });
-      setResult((await r.json()) as Verdict);
+      setResult(
+        (await jpost(`${FIN_URL}/assess/affordability`, {
+          user_id: DEFAULT_USER,
+          amount_ngn: Number(amount),
+          category,
+        })) as Verdict
+      );
     } catch (e: any) {
       setResult({ error: String(e?.message ?? e) });
     } finally {

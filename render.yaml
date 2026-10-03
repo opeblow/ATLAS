@@ -1,0 +1,58 @@
+# ATLAS on Render — single-origin backend.
+#
+# Why one service instead of four: finance, scheduling, MCP and audit data all
+# share one SQLite database. Separate Render services would each get their own
+# filesystem, so they would not see each other's writes. services/edge mounts
+# all four ASGI apps behind a single port and keeps the multi-service
+# architecture intact.
+#
+# The dashboard is a static export deployed separately to Cloudflare Pages; see
+# docs/deployment.md.
+services:
+  - type: web
+    name: atlas
+    runtime: python
+    plan: free
+    region: oregon
+    rootDir: .
+    pythonVersion: "3.12.7"
+    # torch is pinned to the CPU wheel index: the GPU build is ~2.5GB and would
+    # make the build time out for no benefit on this model.
+    buildCommand: >-
+      pip install --upgrade pip
+      && pip install "numpy>=1.26" "torch>=2.2" --index-url https://download.pytorch.org/whl/cpu
+      && pip install
+      -e ./services/common
+      -e ./services/edge
+      -e ./services/finance-service
+      -e ./services/scheduling-service
+      -e ./services/risk-model
+      -e ./mcp-server
+      -e ./reasoning/bedrock-orchestrator
+    startCommand: python -m atlas_edge.asgi
+    healthCheckPath: /edge/health
+    autoDeploy: true
+
+    envVars:
+      # Render injects PORT itself; uvicorn binds it and the edge derives every
+      # sub-service URL from it.
+      - key: ATLAS_SELF_URL
+        value: http://127.0.0.1:8000
+
+      # Keyless demo configuration: SQLite, no AWS, no Redis, no Postgres.
+      # Set this to a persistent disk path in production; Render's free plan has
+      # an ephemeral filesystem and will reset the ledger on each deploy.
+      - key: ATLAS_DATABASE_URL
+        value: sqlite:////opt/render/project/src/atlas.db
+      - key: ATLAS_SEED_ON_START
+        value: "1"
+      # Route /api/ask through the local rule-based router; replies are labelled
+      # simulated:true so the demo never implies a live Bedrock call.
+      - key: ATLAS_MOCK_BEDROCK
+        value: "1"
+      # Demo only. Set to 1 and supply ATLAS_AUTH_SECRET to require bearer tokens.
+      - key: ATLAS_REQUIRE_AUTH
+        value: "0"
+      # The Cloudflare Pages origin, once it exists. Comma-separated.
+      - key: ATLAS_CORS_ORIGINS
+        sync: false

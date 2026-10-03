@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { audit } from "../lib/api";
 
 type Row = {
   id: string;
@@ -20,8 +21,7 @@ export default function LogPanel({ initial }: { initial: Row[] }) {
   const refresh = useCallback(async () => {
     setBusy(true);
     try {
-      const r = await fetch("http://127.0.0.1:8001/audit/tool_calls?limit=40", { cache: "no-store" });
-      setRows(((await r.json()).rows ?? []) as Row[]);
+      setRows(((await audit(40)).rows ?? []) as Row[]);
     } finally {
       setBusy(false);
     }

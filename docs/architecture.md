@@ -18,45 +18,32 @@ Three hard constraints shaped the design:
    token at the transport, and every tool re-checks the caller-supplied
    `user_id` against the token's user before executing.
 
-```
-   Alexa+ / any MCP client                    AWS Builder stack
-   ─────────────────────                     ──────────────────
-        │  streamable-http (sse)
-        ▼
-   ┌─────────────────────────┐         ┌──────────────────────────────┐
-   │  ATLAS MCP server :8003 │         │  reasoning/bedrock-orchestrator │
-   │  FastMCP + Streamable   │         │  Bedrock Converse (tool use)  │
-   │  HTTP transport         │         │  · local fallback router      │
-   │  bearer auth gate       │         │  · same raw REST calls        │
-   └──────┬──────────────┬───┘         └───────────────┬──────────────┘
-          │  finance    │  scheduling                  │
-          ▼             ▼                              ▼
-   ┌─────────────┐ ┌──────────────┐  1. ledger     ┌──────────────┐
-   │ finance-svc │ │ scheduling-  │  2. risk aggs  │ risk-model   │
-   │ :8001       │ │ svc :8002    │────────────────▶ :8000         │
-   │ ledger +    │ │ deadlines +  │  aggregates    │ PyTorch MLP  │
-   │ affordabi-  │ │ plan + commit│  12 features   │ /score       │
-   │ lity + risk │ └──────┬───────┘  over HTTP     │ explainable  │
-   └──────┬──────┘        │                        └──────┬───────┘
-          │               │        SQL (Postgres dev / SQLite local)
-          └───────────────┴───────────────┐                │
-                                          ▼                │
-                                   ┌──────────────┐  cache  │
-                                   │ shared schema│◀────────┘
-                                   │ users, txns, │  (TTL +
-                                   │ risk snaps,  │  circuit
-                                   │ deadlines,   │  breaker)
-                                   │ blocks,      │
-                                   │ mcp_tool_calls
-                                   └──────────────┘
-                                          ▲
-                                   dashboard :3000 (Next.js)
-                                   Today · Money · Time · Agent Log
+```mermaid
+flowchart LR
+  CLIENT["Alexa+ / MCP client"] -->|Streamable HTTP| MCP["MCP server<br/>bearer auth"]
+  DASH["Next.js dashboard"] -->|REST| FIN["Finance service"]
+  DASH -->|REST| SCH["Scheduling service"]
+  MCP -->|HTTP| FIN
+  MCP -->|HTTP| SCH
+  ORCH["Bedrock orchestrator<br/>or local simulated router"] -->|HTTP tools| FIN
+  ORCH -->|HTTP tools| SCH
+  FIN -->|12 engineered features| RISK["Risk model<br/>PyTorch /score"]
+  FIN --> DB[("Shared SQL schema<br/>SQLite local/demo · PostgreSQL configurable")]
+  SCH --> DB
+  MCP -. "tool audit via shared database" .-> DB
+  FIN --> CACHE["Optional Redis + 1.5 s process-local L1"]
 ```
 
 The dashboard reads the services over REST. The services own all reads/writes
 (append-only ledger, snapshot history, audit log). **No database access exists
 outside the services** — the MCP server and the dashboard are HTTP clients only.
+
+The diagram shows service boundaries, not a claim of production scale. The
+single-origin edge deployment mounts these apps in one process; Docker Compose
+can run the APIs separately but supplies only a single Postgres container.
+Million-user capacity, multi-zone failover, and latency targets have not been
+load-tested or established. See the README's scale-out gates before making
+capacity claims.
 
 ## 2. The six capabilities
 

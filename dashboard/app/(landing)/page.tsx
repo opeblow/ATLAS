@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   IconShield,
   IconCalendar,
@@ -9,12 +9,43 @@ import {
   IconMic,
   IconChart,
   IconClose,
-  IconPlay,
 } from "../components/Icons";
 
 export default function LandingPage() {
-  const [isPlayingDemo, setIsPlayingDemo] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
+  const aboutDialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showAboutModal) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusable = aboutDialogRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), a[href]'
+    );
+    focusable?.[0]?.focus();
+
+    const handleDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowAboutModal(false);
+        return;
+      }
+      if (event.key !== "Tab" || !focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener("keydown", handleDialogKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleDialogKeyDown);
+      previousFocus?.focus();
+    };
+  }, [showAboutModal]);
 
   return (
     <div className="landing-page">
@@ -31,7 +62,7 @@ export default function LandingPage() {
             <a href="#how-it-works">How It Works</a>
             <a href="#features">Features</a>
             <button
-              onClick={() => setShowAboutModal(true)}
+              type="button" onClick={() => setShowAboutModal(true)}
               style={{ background: "none", border: "none", font: "inherit", color: "inherit", cursor: "pointer" }}
             >
               About
@@ -66,81 +97,18 @@ export default function LandingPage() {
               Get Started Free →
             </Link>
 
-            <button
-              className="btn-demo-watch"
-              onClick={() => setIsPlayingDemo(!isPlayingDemo)}
-            >
-              <IconPlay size={12} color="#334155" />
-              <span>{isPlayingDemo ? "Pause Demo" : "Watch Demo"}</span>
-              <span className="demo-duration">1 min</span>
-            </button>
+            <a href="#product-preview" className="btn-demo-watch">
+              <span>Explore the product</span>
+              <span aria-hidden="true">↓</span>
+            </a>
           </div>
         </div>
 
-        {/* Hero Visual Phone Mockup */}
-        <div className="hero-visual-wrapper">
-          <div className="hero-glow-backdrop" />
-
-          {/* Floating Feature Badges */}
-          <div className="floating-badge badge-1">
-            <IconTarget size={14} color="#ea580c" /> Track Finances
-          </div>
-          <div className="floating-badge badge-2">
-            <IconCalendar size={14} color="#ea580c" /> Manage Schedule
-          </div>
-          <div className="floating-badge badge-3">
-            <IconTarget size={14} color="#ea580c" /> Reach Goals
-          </div>
-
-          <div className="phone-card-mockup">
-            <div className="phone-header-bar">
-              <span>9:41</span>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span className="brand-dot" style={{ width: 6, height: 6 }} />
-                <span className="mono" style={{ fontWeight: 800, color: "#0f172a" }}>ATLAS</span>
-              </div>
-              <img
-                src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80"
-                alt="Opeyemi"
-                style={{ width: 22, height: 22, borderRadius: 99, objectFit: "cover" }}
-              />
-            </div>
-
-            <div className="phone-user-greet">
-              <h4>Good morning, Opeyemi</h4>
-              <p>here is what is happening today:</p>
-            </div>
-
-            <div className="phone-metric-card">
-              <div className="phone-metric-title">You are on track</div>
-              <div className="phone-metric-trend">
-                <span>↑ 12% this month</span>
-              </div>
-              <svg viewBox="0 0 200 40" width="100%" height="32" style={{ marginTop: 6 }}>
-                <path
-                  d="M0,30 Q40,10 80,25 T160,10 T200,18"
-                  fill="none"
-                  stroke="#10b981"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </div>
-
-            <div className="phone-voice-section">
-              <div className="phone-voice-prompt">What would you like to do today?</div>
-              <button className="phone-mic-btn" aria-label="Voice Mic">
-                <IconMic size={20} color="#ffffff" />
-              </button>
-              <div className="soundwave-bars">
-                <span className="soundwave-bar" />
-                <span className="soundwave-bar" />
-                <span className="soundwave-bar" />
-                <span className="soundwave-bar" />
-                <span className="soundwave-bar" />
-              </div>
-            </div>
-          </div>
+        <div className="hero-product-image" id="product-preview">
+          <img
+            src="/landing_page_showcase.png"
+            alt="ATLAS financial dashboard with spending insights, schedule, and voice assistant"
+          />
         </div>
       </section>
 
@@ -294,37 +262,24 @@ export default function LandingPage() {
 
       {/* About Modal */}
       {showAboutModal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15, 23, 42, 0.6)",
-            backdropFilter: "blur(6px)",
-            zIndex: 100,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          onClick={() => setShowAboutModal(false)}
-        >
+        <div className="modal-overlay" onClick={() => setShowAboutModal(false)}>
           <div
-            style={{
-              background: "#ffffff",
-              borderRadius: 24,
-              padding: 36,
-              maxWidth: 540,
-              width: "90%",
-              boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
-              border: "1px solid #e2e8f0",
+            ref={aboutDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="about-atlas-title"
+            className="about-dialog-panel"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setShowAboutModal(false);
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <div className="brand-logo">
+              <div id="about-atlas-title" className="brand-logo">
                 <span className="brand-dot" />
                 <span>About ATLAS</span>
               </div>
-              <button onClick={() => setShowAboutModal(false)} style={{ border: "none", background: "none", cursor: "pointer" }}>
+              <button type="button" aria-label="Close About dialog" onClick={() => setShowAboutModal(false)} style={{ border: "none", background: "none", cursor: "pointer" }}>
                 <IconClose size={18} color="#64748b" />
               </button>
             </div>
@@ -333,7 +288,7 @@ export default function LandingPage() {
               <strong>ATLAS</strong> is an agentic chief of staff driven by voice. It combines a trained PyTorch financial risk model (scoring risk in gradient space), an append-only idempotent transaction ledger, and automated spaced study scheduling.
             </p>
 
-            <div style={{ background: "#f8fafc", borderRadius: 16, padding: 16, border: "1px solid #f1f5f9", marginBottom: 20, fontSize: 13, color: "#334155" }}>
+            <div className="about-innovation-list">
               <div style={{ fontWeight: 700, color: "#ea580c", marginBottom: 6 }}>Key Innovations:</div>
               <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.6 }}>
                 <li><strong>Idempotency Safety:</strong> Replayed voice commands are guaranteed no-ops.</li>
@@ -342,9 +297,9 @@ export default function LandingPage() {
               </ul>
             </div>
 
-            <button className="btn-orange-pill" style={{ width: "100%" }} onClick={() => setShowAboutModal(false)}>
-              Close &amp; Explore Dashboard
-            </button>
+            <Link href="/dashboard" className="btn-orange-pill" style={{ width: "100%" }}>
+              Explore Dashboard
+            </Link>
           </div>
         </div>
       )}

@@ -1,12 +1,30 @@
-import { deadlines, schedule } from "../../lib/api";
+"use client";
+
+import { useEffect, useState } from "react";
+import { deadlines, schedule, DEFAULT_USER } from "../../lib/api";
 import Planner from "../../components/Planner";
 
-export const dynamic = "force-dynamic";
+// Client-rendered for Cloudflare static export; see the note in money/page.tsx.
+export default function Time() {
+  const [dl, setDl] = useState<any[]>([]);
+  const [blocks, setBlocks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-export default async function Time() {
-  const [dl, sc] = await Promise.all([deadlines().catch(() => null), schedule().catch(() => null)]);
-  const deadlineRows = dl?.deadlines ?? [];
-  const blocks = sc?.blocks ?? [];
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      deadlines(DEFAULT_USER).catch(() => null),
+      schedule(DEFAULT_USER).catch(() => null),
+    ]).then(([d, s]) => {
+      if (cancelled) return;
+      setDl(d?.deadlines ?? []);
+      setBlocks(s?.blocks ?? []);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div>
@@ -20,7 +38,7 @@ export default async function Time() {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <h2>Committed blocks · next 7 days</h2>
-        {blocks.length ? (
+        {!loading && blocks.length ? (
           <table className="tbl">
             <thead>
               <tr>
@@ -33,18 +51,22 @@ export default async function Time() {
               {blocks.slice(0, 12).map((b: any) => (
                 <tr key={b.id}>
                   <td className="mono muted">{b.start_at.slice(0, 10)}</td>
-                  <td className="mono faint">{b.start_at.slice(11, 16)}–{b.end_at.slice(11, 16)}</td>
+                  <td className="mono faint">
+                    {b.start_at.slice(11, 16)}–{b.end_at.slice(11, 16)}
+                  </td>
                   <td>{b.title}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         ) : (
-          <p className="muted" style={{ fontSize: 13, margin: 0 }}>Nothing committed yet — generate a plan below.</p>
+          <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+            {loading ? "Loading…" : "Nothing committed yet — generate a plan below."}
+          </p>
         )}
       </div>
 
-      <Planner deadlines={deadlineRows} />
+      <Planner deadlines={dl} />
     </div>
   );
 }

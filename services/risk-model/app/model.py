@@ -24,6 +24,7 @@ import torch.nn as nn
 from app.features import FEATURE_NAMES, FEATURE_LABELS, Features
 
 ARTIFACT_DIR = os.path.join(os.path.dirname(__file__), "artifacts")
+_MIN_SIGMA = 1e-3
 MODEL_PATH = os.path.join(ARTIFACT_DIR, "risk_mlp.pt")
 SCALER_PATH = os.path.join(ARTIFACT_DIR, "scaler.json")
 
@@ -53,11 +54,14 @@ class RiskModel:
         self.net.load_state_dict(state["model"])
         self.net.eval()
         self.mu = np.array(state["mu"], dtype=np.float32)
-        self.sigma = np.array(state["sigma"], dtype=np.float32)
+        # Floor the scale: a feature that was constant during training has
+        # sigma ~0, and dividing by it at serve time produces enormous inputs
+        # that saturate every ReLU and flatten the score to 0.00.
+        self.sigma = np.maximum(np.array(state["sigma"], dtype=np.float32), _MIN_SIGMA)
         self.path = path
 
     def _normalize(self, raw: np.ndarray) -> np.ndarray:
-        return (raw - self.mu) / (self.sigma + 1e-8)
+        return (raw - self.mu) / self.sigma
 
     def score(self, features: Features) -> float:
         x = torch.tensor(self._normalize(np.array(features.vector(), dtype=np.float32)))
@@ -67,9 +71,23 @@ class RiskModel:
     def score_with_factors(self, features: Features) -> tuple[float, list[dict]]:
         """Score 0..1 + the top contributing factors.
 
-        Attribution is gradient-based: impact_i = normalized_x_i * d(score)/dx_i.
-        This gives real, per-feature explainability (Section 7.3) instead of a
-        black-box number.
+        Two distinct quantities, which must not be conflated:
+
+          impact_i    = |d(score)/d(raw_i)| * sigma_i
+                        score movement from a one-standard-deviation change
+          direction_i = sign(d(score)/d(raw_i))
+                        whether raising this feature raises risk
+
+        Two things this fixes. The old code signed the impact by the *normalized*
+        value, so any feature sitting below the training mean flipped its
+        reported direction ("recurring subscriptions lowers risk" for a user
+        whose subscriptions were small). And it used |x_i * g_i| as the
+        magnitude, which vanishes for every feature at its training mean — so a
+        typical user got one or zero factors instead of a real explanation.
+
+        Scaling the derivative by sigma converts from normalized units back to
+        raw-feature units, and because sigma is floored positive the sign of the
+        gradient is exactly the sign of d(score)/d(raw).
         """
         self.net.zero_grad()
         x = torch.tensor(
@@ -79,25 +97,21 @@ class RiskModel:
         out = self.net(x.unsqueeze(0))
         score = float(out.item())
         out.backward()
-        grad = x.grad.detach().numpy()
-        xv = x.detach().numpy()
-        impacts = {name: float(g * v) for name, g, v in zip(FEATURE_NAMES, grad, xv)}
+        grad = x.grad.detach().numpy().ravel()
+        xv = x.detach().numpy().ravel()
 
-        scored = sorted(impacts.items(), key=lambda kv: abs(kv[1]), reverse=True)
-        top = []
-        for name, impact in scored[:5]:
-            if abs(impact) < 1e-4:
-                continue
-            direction = "increases risk" if impact > 0 else "lowers risk"
-            top.append(
-                {
-                    "feature": name,
-                    "label": FEATURE_LABELS.get(name, name),
-                    "impact": round(impact, 4),
-                    "direction": direction,
-                }
-            )
-        return score, top
+        rows = [
+            {
+                "feature": name,
+                "label": FEATURE_LABELS.get(name, name),
+                # raw-unit sensitivity: score change per 1 std-dev of this feature
+                "impact": round(abs(float(g) * float(s)), 4),
+                "direction": "increases risk" if g > 0 else "lowers risk",
+            }
+            for name, g, s in zip(FEATURE_NAMES, grad, self.sigma)
+        ]
+        rows.sort(key=lambda r: r["impact"], reverse=True)
+        return score, [r for r in rows[:5] if r["impact"] >= 1e-4]
 
 
 @lru_cache(maxsize=1)
