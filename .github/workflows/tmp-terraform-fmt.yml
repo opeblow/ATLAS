@@ -1,0 +1,48 @@
+name: tmp-terraform-fmt
+
+# TEMPORARY: one-shot formatter. CI has network access to releases.hashicorp.com
+# and this machine does not, so let the runner run `terraform fmt` and push the
+# result. Deleted once it has landed.
+
+on:
+  push:
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/tmp-terraform-fmt.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "1.8.5"
+
+      - name: Format
+        working-directory: infra/terraform
+        run: |
+          terraform fmt -recursive -diff
+          echo "### terraform fmt -check -recursive" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          terraform fmt -check -recursive && echo "clean" || echo "would reformat (see diff above)"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit the formatting
+        run: |
+          if git diff --quiet -- infra/terraform; then
+            echo "already canonical"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add infra/terraform
+          git commit -m "style(terraform): apply terraform fmt"
+          git push origin HEAD:${{ github.ref_name }}
