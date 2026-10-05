@@ -116,7 +116,7 @@ export default function LandingPage() {
             </button>
           </nav>
 
-          <Link href="/dashboard" className="btn-orange-pill">
+          <Link href="/dashboard" className="btn-primary">
             Get Started →
           </Link>
         </div>
@@ -140,7 +140,7 @@ export default function LandingPage() {
           </p>
 
           <div className="hero-ctas">
-            <Link href="/dashboard" className="btn-orange-pill">
+            <Link href="/dashboard" className="btn-primary">
               Get Started Free →
             </Link>
             <a href="#product-preview" className="btn-demo-watch">
@@ -153,8 +153,8 @@ export default function LandingPage() {
         <div className="hero-product-image" id="product-preview">
           <div className="hero-product-image-inner">
             <img
-              src="/landing_page_showcase.png"
-              alt="ATLAS dashboard showing spending insights, today's schedule, and the voice assistant"
+              src="/product-preview.svg"
+              alt="The ATLAS dashboard: navigation, spend, risk and schedule figures, a twelve-week spend trend, and the assistant"
               width={1120}
               height={700}
               loading="eager"
@@ -191,7 +191,7 @@ export default function LandingPage() {
               Get started in minutes and let Atlas handle the complexity. It is
               like having a personal chief of staff in your pocket.
             </p>
-            <Link href="/dashboard" className="btn-orange-pill">
+            <Link href="/dashboard" className="btn-primary">
               See how it works →
             </Link>
           </div>
@@ -264,7 +264,7 @@ export default function LandingPage() {
 
           <p>© {new Date().getFullYear()} ATLAS. Built for money and time.</p>
 
-          <Link href="/dashboard" className="btn-orange-pill">
+          <Link href="/dashboard" className="btn-primary">
             Open Dashboard →
           </Link>
         </div>
@@ -321,7 +321,7 @@ export default function LandingPage() {
               </ul>
             </div>
 
-            <Link href="/dashboard" className="btn-orange-pill btn-block">
+            <Link href="/dashboard" className="btn-primary btn-block">
               Explore Dashboard
             </Link>
           </div>

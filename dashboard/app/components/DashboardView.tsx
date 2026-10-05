@@ -257,7 +257,7 @@ export default function DashboardView() {
 
         <div style={{ display: "flex", gap: 10 }}>
           <button
-            className="btn-orange-pill"
+            className="btn-primary"
             style={{ padding: "8px 16px", fontSize: "13px" }}
             onClick={() => setShowTxModal(true)}
           >
@@ -625,7 +625,7 @@ export default function DashboardView() {
         </div>
 
         {/* Motivation Card */}
-        <div className="motivation-card-orange">
+        <div className="motivation-card-accent">
           <div>
             <div className="kpi-icon-badge" style={{ width: 36, height: 36, fontSize: 18 }}><IconTarget size={20} /></div>
             <h3 style={{ fontSize: 18, fontWeight: 800, color: "var(--fg)", margin: "14px 0 4px" }}>
@@ -696,7 +696,7 @@ export default function DashboardView() {
               </div>
 
               <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-                <button type="submit" className="btn-orange-pill" style={{ flex: 1 }}>
+                <button type="submit" className="btn-primary" style={{ flex: 1 }}>
                   Log Spend
                 </button>
                 <button type="button" onClick={() => setShowTxModal(false)} className="btn-demo-watch" style={{ flex: 1 }}>
@@ -761,7 +761,7 @@ export default function DashboardView() {
               </div>
 
               <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-                <button type="submit" className="btn-orange-pill" style={{ flex: 1 }}>
+                <button type="submit" className="btn-primary" style={{ flex: 1 }}>
                   Create Deadline
                 </button>
                 <button type="button" onClick={() => setShowDeadlineModal(false)} className="btn-demo-watch" style={{ flex: 1 }}>

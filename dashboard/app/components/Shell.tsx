@@ -167,7 +167,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           <p>Your finances and schedule are private to your account.</p>
           {authError && <p role="alert" className="auth-error">{authError}</p>}
           <button
-            className="btn-orange-pill"
+            className="btn-primary"
             onClick={() => beginSignIn().catch((error: Error) => setAuthError(error.message))}
           >
             Continue with Amazon Cognito
@@ -279,7 +279,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               <IconUser size={18} />
               <span className="user-name-text">Signed in</span>
             </span>
-            <button className="btn-orange-pill" onClick={signOut}>Sign out</button>
+            <button className="btn-primary" onClick={signOut}>Sign out</button>
 
             <button
               className="icon-btn-circle"
@@ -410,7 +410,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                   </div>
                 ))}
               <button
-                className="btn-orange-pill"
+                className="btn-primary"
                 onClick={() => setShowSettingsModal(false)}
                 style={{ marginTop: 10 }}
               >

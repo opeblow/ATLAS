@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 700" width="1120" height="700" role="img" aria-labelledby="pp-title pp-desc">
+  <title id="pp-title">The ATLAS dashboard</title>
+  <desc id="pp-desc">A product preview of ATLAS: a left navigation rail, three summary figures for spend, risk and today's schedule, a twelve-week spend trend, and a list of today's commitments.</desc>
+
+  <defs>
+    <clipPath id="pp-window"><rect x="0" y="0" width="1120" height="700" rx="14"/></clipPath>
+    <clipPath id="pp-chart"><rect x="556" y="322" width="516" height="196" rx="8"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#pp-window)">
+    <rect width="1120" height="700" fill="#fbfcfd"/>
+
+    <!-- navigation rail -->
+    <rect width="228" height="700" fill="#ffffff"/>
+    <rect x="227" width="1" height="700" fill="#e4e7ec"/>
+    <rect x="24" y="28" width="26" height="26" rx="7" fill="#0a0c10"/>
+    <path d="M31 44 L37 33 L43 44" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="58" y="36" width="52" height="9" rx="4.5" fill="#0a0c10"/>
+
+    <rect x="16" y="86" width="196" height="32" rx="8" fill="#f2f4f7"/>
+    <rect x="28" y="97" width="12" height="12" rx="3" fill="#0070f3"/>
+    <rect x="48" y="99" width="66" height="8" rx="4" fill="#0a0c10"/>
+
+    <g fill="#98a2b3">
+      <rect x="28" y="142" width="12" height="12" rx="3"/>
+      <rect x="28" y="180" width="12" height="12" rx="3"/>
+      <rect x="28" y="218" width="12" height="12" rx="3"/>
+      <rect x="28" y="256" width="12" height="12" rx="3"/>
+    </g>
+    <g fill="#c4cad4">
+      <rect x="48" y="144" width="58" height="8" rx="4"/>
+      <rect x="48" y="182" width="72" height="8" rx="4"/>
+      <rect x="48" y="220" width="50" height="8" rx="4"/>
+      <rect x="48" y="258" width="64" height="8" rx="4"/>
+    </g>
+
+    <rect x="16" y="616" width="196" height="60" rx="10" fill="#f9fafb" stroke="#e4e7ec"/>
+    <circle cx="44" cy="646" r="14" fill="#e4e7ec"/>
+    <rect x="68" y="638" width="54" height="7" rx="3.5" fill="#344054"/>
+    <rect x="68" y="651" width="76" height="6" rx="3" fill="#98a2b3"/>
+
+    <!-- header -->
+    <rect x="228" width="892" height="76" fill="#ffffff"/>
+    <rect x="228" y="75" width="892" height="1" fill="#e4e7ec"/>
+    <rect x="260" y="30" width="132" height="12" rx="6" fill="#0a0c10"/>
+    <rect x="260" y="50" width="184" height="8" rx="4" fill="#98a2b3"/>
+    <rect x="932" y="28" width="76" height="28" rx="8" fill="#0a0c10"/>
+    <rect x="1020" y="28" width="68" height="28" rx="8" fill="#ffffff" stroke="#e4e7ec"/>
+    <rect x="1040" y="39" width="28" height="6" rx="3" fill="#344054"/>
+
+    <!-- summary figures -->
+    <g>
+      <rect x="260" y="108" width="256" height="112" rx="12" fill="#ffffff" stroke="#e4e7ec"/>
+      <rect x="284" y="132" width="64" height="8" rx="4" fill="#98a2b3"/>
+      <rect x="284" y="156" width="104" height="18" rx="6" fill="#0a0c10"/>
+      <rect x="284" y="184" width="72" height="8" rx="4" fill="#0070f3"/>
+    </g>
+    <g>
+      <rect x="540" y="108" width="256" height="112" rx="12" fill="#ffffff" stroke="#e4e7ec"/>
+      <rect x="564" y="132" width="56" height="8" rx="4" fill="#98a2b3"/>
+      <rect x="564" y="156" width="88" height="18" rx="6" fill="#0a0c10"/>
+      <rect x="564" y="184" width="96" height="8" rx="4" fill="#667085"/>
+    </g>
+    <g>
+      <rect x="820" y="108" width="256" height="112" rx="12" fill="#ffffff" stroke="#e4e7ec"/>
+      <rect x="844" y="132" width="72" height="8" rx="4" fill="#98a2b3"/>
+      <rect x="844" y="156" width="76" height="18" rx="6" fill="#0a0c10"/>
+      <rect x="844" y="184" width="88" height="8" rx="4" fill="#0070f3"/>
+    </g>
+
+    <!-- spend trend -->
+    <rect x="260" y="244" width="272" height="296" rx="12" fill="#ffffff" stroke="#e4e7ec"/>
+    <rect x="284" y="268" width="88" height="10" rx="5" fill="#0a0c10"/>
+    <rect x="284" y="286" width="120" height="7" rx="3.5" fill="#98a2b3"/>
+    <g>
+      <rect x="284" y="322" width="16" height="9" rx="4" fill="#e4e7ec"/>
+      <rect x="310" y="326" width="12" height="5" rx="2.5" fill="#c4cad4"/>
+      <rect x="284" y="356" width="44" height="9" rx="4" fill="#e4e7ec"/>
+      <rect x="338" y="360" width="12" height="5" rx="2.5" fill="#c4cad4"/>
+      <rect x="284" y="390" width="32" height="9" rx="4" fill="#e4e7ec"/>
+      <rect x="326" y="394" width="12" height="5" rx="2.5" fill="#c4cad4"/>
+    </g>
+    <rect x="284" y="430" width="224" height="1" fill="#e4e7ec"/>
+    <rect x="284" y="446" width="60" height="7" rx="3.5" fill="#98a2b3"/>
+    <rect x="284" y="466" width="44" height="7" rx="3.5" fill="#c4cad4"/>
+    <rect x="284" y="486" width="52" height="7" rx="3.5" fill="#c4cad4"/>
+    <rect x="284" y="506" width="36" height="7" rx="3.5" fill="#c4cad4"/>
+
+    <!-- trend chart -->
+    <rect x="556" y="244" width="520" height="296" rx="12" fill="#ffffff" stroke="#e4e7ec"/>
+    <rect x="580" y="268" width="104" height="10" rx="5" fill="#0a0c10"/>
+    <rect x="580" y="286" width="140" height="7" rx="3.5" fill="#98a2b3"/>
+    <g stroke="#eef0f3" stroke-width="1">
+      <line x1="580" y1="330" x2="1048" y2="330"/>
+      <line x1="580" y1="382" x2="1048" y2="382"/>
+      <line x1="580" y1="434" x2="1048" y2="434"/>
+      <line x1="580" y1="486" x2="1048" y2="486"/>
+    </g>
+    <g clip-path="url(#pp-chart)">
+      <path d="M580 470 L624 452 L668 462 L712 428 L756 440 L800 404 L844 416 L888 384 L932 396 L976 358 L1020 372 L1048 352 L1048 518 L580 518 Z" fill="#0070f3" fill-opacity="0.07"/>
+      <path d="M580 470 L624 452 L668 462 L712 428 L756 440 L800 404 L844 416 L888 384 L932 396 L976 358 L1020 372 L1048 352" fill="none" stroke="#0070f3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="976" cy="358" r="4.5" fill="#ffffff" stroke="#0070f3" stroke-width="2.5"/>
+    </g>
+    <g fill="#c4cad4">
+      <rect x="580" y="540" width="30" height="6" rx="3"/>
+      <rect x="640" y="540" width="30" height="6" rx="3"/>
+      <rect x="700" y="540" width="30" height="6" rx="3"/>
+      <rect x="760" y="540" width="30" height="6" rx="3"/>
+      <rect x="820" y="540" width="30" height="6" rx="3"/>
+      <rect x="880" y="540" width="30" height="6" rx="3"/>
+      <rect x="940" y="540" width="30" height="6" rx="3"/>
+      <rect x="1000" y="540" width="30" height="6" rx="3"/>
+    </g>
+
+    <!-- assistant -->
+    <rect x="260" y="564" width="816" height="92" rx="12" fill="#ffffff" stroke="#e4e7ec"/>
+    <circle cx="308" cy="610" r="20" fill="#0a0c10"/>
+    <path d="M302 604 L302 618 M314 604 L314 618 M296 610 L320 610" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
+    <rect x="344" y="590" width="420" height="10" rx="5" fill="#0a0c10"/>
+    <rect x="344" y="610" width="320" height="8" rx="4" fill="#98a2b3"/>
+    <rect x="960" y="592" width="92" height="36" rx="9" fill="#f2f4f7"/>
+  </g>
+
+  <rect x="0.5" y="0.5" width="1119" height="699" rx="14" fill="none" stroke="#e4e7ec"/>
+</svg>

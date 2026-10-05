@@ -39,8 +39,8 @@
   --positive-wash: #f0fdf4;
   --negative: #d1293d;
   --negative-wash: #fef2f2;
-  --warning: #b25000;
-  --warning-wash: #fff8eb;
+  --warning: #7a5c00;
+  --warning-wash: #faf6e8;
 
   /* Geometry */
   --radius-sm: 4px;
@@ -526,7 +526,7 @@ svg {
   color: var(--fg);
 }
 
-.btn-orange-pill {
+.btn-primary {
   display: inline-flex;
   min-height: 36px;
   align-items: center;
@@ -543,7 +543,7 @@ svg {
   transition: background-color 120ms ease, border-color 120ms ease;
 }
 
-.btn-orange-pill:hover {
+.btn-primary:hover {
   background: #262626;
   border-color: #262626;
 }
@@ -606,7 +606,7 @@ svg {
   flex-wrap: wrap;
 }
 
-.hero-ctas .btn-orange-pill,
+.hero-ctas .btn-primary,
 .btn-demo-watch {
   min-height: 44px;
   padding: 10px 20px;
@@ -1539,7 +1539,7 @@ svg {
   color: var(--fg);
 }
 
-.motivation-card-orange {
+.motivation-card-accent {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -1660,9 +1660,12 @@ svg {
 
 .voice-widget-reply-head .badge-sim {
   padding: 2px 7px;
-  background: var(--warning-wash);
+  /* Neutral, not amber: "simulated" is a disclosure, not a warning, and the
+     warning hue read as the old orange brand. */
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
   border-radius: 999px;
-  color: var(--warning);
+  color: var(--muted);
   font-size: 9px;
   letter-spacing: 0.04em;
 }
@@ -1863,8 +1866,8 @@ svg {
   --positive-wash: #0d1f14;
   --negative: #ff6369;
   --negative-wash: #1f1113;
-  --warning: #f5a623;
-  --warning-wash: #1f1608;
+  --warning: #c9a961;
+  --warning-wash: #201c11;
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.5);
   --shadow-float: 0 4px 16px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.4);
 
@@ -1875,7 +1878,7 @@ svg {
 .dark-theme .brand-dot,
 .dark-theme .bar-fill-rect,
 .dark-theme .progress-fill-bar,
-.dark-theme .btn-orange-pill,
+.dark-theme .btn-primary,
 .dark-theme .voice-widget-mic,
 .dark-theme .btn.accent {
   background: var(--fg);
@@ -1883,7 +1886,7 @@ svg {
   color: var(--bg);
 }
 
-.dark-theme .btn-orange-pill:hover,
+.dark-theme .btn-primary:hover,
 .dark-theme .voice-widget-mic:hover {
   background: #d4d4d4;
   border-color: #d4d4d4;
@@ -2041,7 +2044,7 @@ svg {
     font-size: 15px;
   }
 
-  .hero-ctas .btn-orange-pill,
+  .hero-ctas .btn-primary,
   .btn-demo-watch {
     min-height: 40px;
     font-size: 14px;

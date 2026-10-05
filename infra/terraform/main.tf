@@ -271,36 +271,40 @@ resource "aws_ecs_service" "atlas" {
       container_name   = "mcp"
       container_port   = 8003
     }
-
-    resource "aws_appautoscaling_target" "atlas" {
-      for_each           = local.task_defs
-      max_capacity       = var.ecs_max_capacity
-      min_capacity       = var.ecs_min_capacity
-      resource_id        = "service/${aws_ecs_cluster.atlas.name}/${aws_ecs_service.atlas[each.key].name}"
-      scalable_dimension = "ecs:service:DesiredCount"
-      service_namespace  = "ecs"
-    }
-
-    resource "aws_appautoscaling_policy" "cpu" {
-      for_each           = local.task_defs
-      name               = "${local.name}-${each.key}-cpu"
-      policy_type        = "TargetTrackingScaling"
-      resource_id        = aws_appautoscaling_target.atlas[each.key].resource_id
-      scalable_dimension = aws_appautoscaling_target.atlas[each.key].scalable_dimension
-      service_namespace  = aws_appautoscaling_target.atlas[each.key].service_namespace
-
-      target_tracking_scaling_policy_configuration {
-        target_value       = 60
-        scale_in_cooldown  = 180
-        scale_out_cooldown = 60
-        predefined_metric_specification {
-          predefined_metric_type = "ECSServiceAverageCPUUtilization"
-        }
-      }
-    }
   }
+
   depends_on = [aws_lb_listener.https]
   tags       = local.common_tags
+}
+
+# Autoscaling targets are top-level resources, not nested inside the service or
+# its dynamic load_balancer block: HCL has no nested resource blocks, and
+# `depends_on`/`tags` belong to the service itself, not to the dynamic block.
+resource "aws_appautoscaling_target" "atlas" {
+  for_each           = local.task_defs
+  max_capacity       = var.ecs_max_capacity
+  min_capacity       = var.ecs_min_capacity
+  resource_id        = "service/${aws_ecs_cluster.atlas.name}/${aws_ecs_service.atlas[each.key].name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+resource "aws_appautoscaling_policy" "cpu" {
+  for_each           = local.task_defs
+  name               = "${local.name}-${each.key}-cpu"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.atlas[each.key].resource_id
+  scalable_dimension = aws_appautoscaling_target.atlas[each.key].scalable_dimension
+  service_namespace  = aws_appautoscaling_target.atlas[each.key].service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    target_value       = 60
+    scale_in_cooldown  = 180
+    scale_out_cooldown = 60
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+  }
 }
 
 # ------------------------------------------------------------------ load balancer
