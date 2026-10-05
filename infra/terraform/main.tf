@@ -108,22 +108,22 @@ resource "aws_security_group" "lb" {
 # ------------------------------------------------------------------ database
 # DDL comes from services/common/atlas_common/schema.sql — apply once via psql.
 resource "aws_db_instance" "atlas" {
-  identifier             = "${local.name}-db"
-  engine                 = "postgres"
-  engine_version         = "15.7"
-  instance_class         = var.db_instance_class
-  allocated_storage      = 20
-  db_name                = "atlas"
-  username               = var.db_user
-  password               = var.db_password
+  identifier              = "${local.name}-db"
+  engine                  = "postgres"
+  engine_version          = "15.7"
+  instance_class          = var.db_instance_class
+  allocated_storage       = 20
+  db_name                 = "atlas"
+  username                = var.db_user
+  password                = var.db_password
   multi_az                = true
   storage_encrypted       = true
   backup_retention_period = 7
   deletion_protection     = true
-  vpc_security_group_ids = [aws_security_group.services.id]
-  db_subnet_group_name   = aws_db_subnet_group.atlas.name
-  skip_final_snapshot    = true
-  tags                   = local.common_tags
+  vpc_security_group_ids  = [aws_security_group.services.id]
+  db_subnet_group_name    = aws_db_subnet_group.atlas.name
+  skip_final_snapshot     = true
+  tags                    = local.common_tags
 }
 
 resource "aws_db_subnet_group" "atlas" {
@@ -139,7 +139,7 @@ resource "aws_secretsmanager_secret" "database_url" {
 }
 
 resource "aws_secretsmanager_secret_version" "database_url" {
-  secret_id    = aws_secretsmanager_secret.database_url.id
+  secret_id     = aws_secretsmanager_secret.database_url.id
   secret_string = "postgresql+psycopg2://${var.db_user}:${var.db_password}@${aws_db_instance.atlas.endpoint}/atlas"
 }
 
