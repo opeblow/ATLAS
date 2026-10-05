@@ -13,6 +13,7 @@ dependencies = [
   "pydantic>=2",
   "numpy>=1.26",
   "torch>=2.2",
+  "atlas-common>=0.1.0",
 ]
 
 [project.optional-dependencies]

@@ -1,7 +1,7 @@
 # ATLAS on Render — single-origin backend.
 #
 # Why one service instead of four: finance, scheduling, MCP and audit data all
-# share one SQLite database. Separate Render services would each get their own
+# share one PostgreSQL database. Separate Render services would each get their own
 # filesystem, so they would not see each other's writes. services/edge mounts
 # all four ASGI apps behind a single port and keeps the multi-service
 # architecture intact.
@@ -34,25 +34,34 @@ services:
     autoDeploy: true
 
     envVars:
-      # Render injects PORT itself; uvicorn binds it and the edge derives every
-      # sub-service URL from it.
-      - key: ATLAS_SELF_URL
-        value: http://127.0.0.1:8000
+      # ATLAS_SELF_URL is deliberately NOT set. Render injects a dynamic PORT and
+      # atlas_edge.asgi defaults ATLAS_SELF_URL to http://127.0.0.1:$PORT, which is
+      # what the internal sub-service calls need. Pinning it to :8000 (as this
+      # file previously did) makes every self-call fail whenever Render assigns a
+      # different port, with a connection-refused rather than anything obvious.
 
-      # Keyless demo configuration: SQLite, no AWS, no Redis, no Postgres.
-      # Set this to a persistent disk path in production; Render's free plan has
-      # an ephemeral filesystem and will reset the ledger on each deploy.
+      # Require an external managed Postgres URL; never persist multi-user data
+      # on Render's ephemeral filesystem.
       - key: ATLAS_DATABASE_URL
-        value: sqlite:////opt/render/project/src/atlas.db
+        sync: false
       - key: ATLAS_SEED_ON_START
-        value: "1"
-      # Route /api/ask through the local rule-based router; replies are labelled
-      # simulated:true so the demo never implies a live Bedrock call.
+        value: "0"
+      # The Render service is a demo host, not the production scale target.
       - key: ATLAS_MOCK_BEDROCK
         value: "1"
-      # Demo only. Set to 1 and supply ATLAS_AUTH_SECRET to require bearer tokens.
+      # Fail closed: Cognito configuration must be supplied before user APIs work.
+      - key: ATLAS_AUTH_MODE
+        value: cognito
       - key: ATLAS_REQUIRE_AUTH
-        value: "0"
+        value: "1"
+      - key: ATLAS_COGNITO_USER_POOL_ID
+        sync: false
+      - key: ATLAS_COGNITO_APP_CLIENT_ID
+        sync: false
+      - key: ATLAS_COGNITO_ISSUER
+        sync: false
+      - key: AWS_REGION
+        sync: false
       # The Cloudflare Pages origin, once it exists. Comma-separated.
       - key: ATLAS_CORS_ORIGINS
         sync: false

@@ -7,14 +7,15 @@ Two pieces:
 | `atlas` | Render (Python web service) | One process serving finance, scheduling, risk and MCP under a single origin |
 | `atlas-dashboard` | Cloudflare Pages | Static Next.js export, no server runtime |
 
-The stack needs no API keys. AWS Bedrock is replaced by a local rule-based
-router that returns `simulated: true` on every reply, so the demo never implies
-a live AWS call happened.
+The local demo uses a rule-based router and reports it as simulated. The
+repository's Render template now fails closed on Cognito configuration and
+requires an externally managed database URL. Do not deploy it expecting a
+working demo until those settings are configured.
 
 ## Why the backend is one service
 
-Finance, scheduling, MCP and the audit log all read and write the same SQLite
-database. Four Render services would each get their own filesystem and could not
+Finance, scheduling, MCP and the audit log all read and write the same managed
+PostgreSQL database. Four Render services would each get their own filesystem and could not
 see each other's writes, so `services/edge/atlas_edge/asgi.py` mounts all four
 ASGI apps behind one port:
 
@@ -67,19 +68,24 @@ build times out.
 |---|---|---|
 | `PORT` | set by Render | uvicorn bind port |
 | `ATLAS_SELF_URL` | `http://127.0.0.1:8000` | base URL sub-services call each other on |
-| `ATLAS_DATABASE_URL` | `sqlite:////opt/render/project/src/atlas.db` | keyless, no Postgres |
-| `ATLAS_SEED_ON_START` | `1` | seeds `u_demo` on a cold database |
+| `ATLAS_DATABASE_URL` | External managed PostgreSQL DSN | Required; Render filesystem is not durable |
+| `ATLAS_SEED_ON_START` | `0` | Do not seed shared production data |
 | `ATLAS_MOCK_BEDROCK` | `1` | route `/api/ask` through the local router |
-| `ATLAS_REQUIRE_AUTH` | `0` | demo mode, no bearer tokens |
+| `ATLAS_AUTH_MODE` | `cognito` | Production authentication mode |
+| `ATLAS_REQUIRE_AUTH` | `1` | Fail closed; cannot disable in Cognito mode |
+| `ATLAS_COGNITO_ISSUER` | Cognito user-pool issuer URL | Validate token issuer/signing keys |
+| `ATLAS_COGNITO_APP_CLIENT_ID` | Cognito public app-client ID | Bind access tokens to the dashboard client |
+| `AWS_REGION` | Cognito pool / Bedrock region | Resolve user-pool JWKS and optional Bedrock |
 | `ATLAS_CORS_ORIGINS` | your Pages URL | the dashboard is cross-origin |
+| Dashboard `NEXT_PUBLIC_COGNITO_DOMAIN` | Cognito hosted UI base URL | OAuth authorization-code + PKCE |
+| Dashboard `NEXT_PUBLIC_COGNITO_APP_CLIENT_ID` | Cognito public client ID | Must match backend verifier |
+| Dashboard `NEXT_PUBLIC_COGNITO_REDIRECT_URI` | Exact registered `/auth/callback` URL | OAuth callback |
 
 ### Two things to know before demoing
 
-**The free plan has an ephemeral filesystem.** Every deploy and every restart
-wipes `atlas.db`. `ATLAS_SEED_ON_START=1` repopulates `u_demo`, so the demo
-reboots clean, but anything written during a session is lost on restart. For a
-demo that is usually fine; for anything else attach a disk and point
-`ATLAS_DATABASE_URL` at it.
+**The free plan is not a production database or scale tier.** Use managed
+PostgreSQL with backups and tested restore procedures; never persist user data
+to the service's local filesystem.
 
 **The free plan sleeps.** A cold start takes a few seconds while the container
 boots and the model loads. Send a request before you present.
@@ -92,9 +98,7 @@ $ATLAS = "https://atlas-<hash>.onrender.com"
 curl "$ATLAS/edge/health"
 curl "$ATLAS/api/capabilities"
 
-# a full reasoning turn through the local router
-curl "$ATLAS/api/ask" -Method Post -ContentType "application/json" `
-  -Body '{"utterance":"can I afford a 120k laptop?","user_id":"u_demo"}'
+# user endpoints require a valid Cognito access token; see OAuth setup below
 ```
 
 `/api/capabilities` should report `bedrock.mode = "simulated"` and
@@ -116,7 +120,10 @@ Set one build variable:
 
 | Variable | Value |
 |---|---|
-| `NEXT_PUBLIC_ATLAS_URL` | your Render URL, no trailing slash |
+| `NEXT_PUBLIC_ATLAS_URL` | your API URL, no trailing slash |
+| `NEXT_PUBLIC_COGNITO_DOMAIN` | Cognito hosted UI domain, without a trailing slash |
+| `NEXT_PUBLIC_COGNITO_APP_CLIENT_ID` | Cognito public client ID |
+| `NEXT_PUBLIC_COGNITO_REDIRECT_URI` | Exact public `/auth/callback` URL |
 
 `NEXT_PUBLIC_ATLAS_URL` is inlined at build time, so redeploy the Pages project
 whenever the Render URL changes. Building without it prints a warning and falls
@@ -140,6 +147,7 @@ One process, same shape as production:
 
 ```powershell
 $env:ATLAS_SEED_ON_START = "1"
+$env:ATLAS_AUTH_MODE = "dev"
 $env:ATLAS_REQUIRE_AUTH = "0"
 python -m atlas_edge.asgi            # http://127.0.0.1:8000
 ```
@@ -153,13 +161,18 @@ cd mcp-server; python -m pytest tests -q
 cd ..\reasoning\bedrock-orchestrator; python -m pytest tests -q
 ```
 
-With `ATLAS_REQUIRE_AUTH=1`, the integration suite also exercises bearer auth
-and the per-tool identity check that rejects a `user_id` not matching the token.
+`ATLAS_AUTH_MODE=dev` is for local testing only; it enables the development
+token issuer. Never set this mode on an internet-facing deployment. The
+integration suite verifies bearer auth and rejects a user ID that does not
+match the authenticated token.
 
 ## Turning on real Bedrock
 
-Set `ATLAS_MOCK_BEDROCK=0` and supply `AWS_REGION` plus credentials with
-`bedrock:InvokeModel`. `orchestrator/bedrock.py` then routes to
+Authenticate locally (for example, `aws sso login --profile <profile>`), set
+`AWS_PROFILE`, `AWS_REGION`, and `ATLAS_MOCK_BEDROCK=0`, then run
+`python scripts/test_bedrock.py --profile <profile>` to make a live, small
+Converse request. The caller needs `bedrock:InvokeModel` and access to the
+configured model. `orchestrator/bedrock.py` then routes to
 `amazon.bedrock-runtime` and `/api/capabilities` reports `bedrock.mode =
 "live"`. The local router stays in place as the fallback if Bedrock is
-unreachable at call time.
+unreachable at call time; a fallback response must be identified as simulated.

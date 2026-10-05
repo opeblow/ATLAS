@@ -32,9 +32,10 @@ class Settings:
     scheduling_url: str = os.getenv("ATLAS_SCHEDULING_URL", "http://127.0.0.1:8002")
     risk_model_url: str = os.getenv("ATLAS_RISK_MODEL_URL", "http://127.0.0.1:8000")
 
-    # Bearer-token auth for the MCP surface. In dev, any token issued by
-    # /auth/token passes; in production these are short-lived, per-session tokens.
-    require_auth: bool = _flag("ATLAS_REQUIRE_AUTH", "1")
+    auth_mode: str = os.getenv("ATLAS_AUTH_MODE", "cognito").strip().lower()
+    # Auth cannot be disabled in Cognito mode. The unsafe override is honored
+    # only for an explicitly selected local development mode.
+    require_auth: bool = auth_mode != "dev" or _flag("ATLAS_REQUIRE_AUTH", "1")
 
     # Browser origins allowed to call the REST services. The dashboard is
     # client-side, so a deployed build is cross-origin and CORS must be explicit.
@@ -54,5 +55,6 @@ class Settings:
     def is_sqlite(self) -> bool:
         return self.db_url.startswith("sqlite")
 
-
 settings = Settings()
+if settings.auth_mode not in {"cognito", "dev"}:
+    raise ValueError("ATLAS_AUTH_MODE must be 'cognito' or 'dev'")

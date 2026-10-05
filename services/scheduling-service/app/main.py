@@ -26,6 +26,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from atlas_common.config import settings
+from atlas_common.auth import authenticated_user, require_user_id
 from atlas_common.db import get_session, init_db
 from atlas_common.models import Deadline, ScheduleBlock, User
 
@@ -106,7 +107,12 @@ def _block_json(b: ScheduleBlock) -> dict:
 
 # ---------------------------------------------------------------- deadlines
 @app.post("/deadlines")
-def upsert_deadlines(inp: DeadlineIn, db: Session = Depends(get_session)) -> dict:
+def upsert_deadlines(
+    inp: DeadlineIn,
+    db: Session = Depends(get_session),
+    auth_user_id: str = Depends(authenticated_user),
+) -> dict:
+    require_user_id(inp.user_id, auth_user_id)
     _ensure_user(db, inp.user_id)
     if inp.id:
         deadline = db.get(Deadline, inp.id)
@@ -124,7 +130,12 @@ def upsert_deadlines(inp: DeadlineIn, db: Session = Depends(get_session)) -> dic
 
 
 @app.get("/users/{user_id}/deadlines")
-def list_deadlines(user_id: str, db: Session = Depends(get_session)) -> dict:
+def list_deadlines(
+    user_id: str,
+    db: Session = Depends(get_session),
+    auth_user_id: str = Depends(authenticated_user),
+) -> dict:
+    require_user_id(user_id, auth_user_id)
     _ensure_user(db, user_id)
     rows = (
         db.query(Deadline)
@@ -143,7 +154,12 @@ def list_deadlines(user_id: str, db: Session = Depends(get_session)) -> dict:
 
 # ---------------------------------------------------------------- plan
 @app.post("/plan/week")
-def plan_week(inp: PlanWeekIn, db: Session = Depends(get_session)) -> dict:
+def plan_week(
+    inp: PlanWeekIn,
+    db: Session = Depends(get_session),
+    auth_user_id: str = Depends(authenticated_user),
+) -> dict:
+    require_user_id(inp.user_id, auth_user_id)
     _ensure_user(db, inp.user_id)
     deadlines = [d.model_dump() for d in inp.deadlines]
     blocks, conflicts = plan_study_week(deadlines, inp.available_hours)
@@ -152,7 +168,12 @@ def plan_week(inp: PlanWeekIn, db: Session = Depends(get_session)) -> dict:
 
 # ---------------------------------------------------------------- commit
 @app.post("/schedule/commit")
-def commit_schedule(inp: CommitIn, db: Session = Depends(get_session)) -> dict:
+def commit_schedule(
+    inp: CommitIn,
+    db: Session = Depends(get_session),
+    auth_user_id: str = Depends(authenticated_user),
+) -> dict:
+    require_user_id(inp.user_id, auth_user_id)
     _ensure_user(db, inp.user_id)
 
     if inp.idempotency_key:
@@ -230,7 +251,9 @@ def list_schedule(
     user_id: str,
     db: Session = Depends(get_session),
     status: str = Query("committed", pattern="^(proposed|committed|completed)$"),
+    auth_user_id: str = Depends(authenticated_user),
 ) -> dict:
+    require_user_id(user_id, auth_user_id)
     _ensure_user(db, user_id)
     rows = (
         db.query(ScheduleBlock)
@@ -248,16 +271,21 @@ def patch_block(
     end_at: datetime | None = None,
     status: str | None = None,
     db: Session = Depends(get_session),
+    auth_user_id: str = Depends(authenticated_user),
 ) -> dict:
     block = db.get(ScheduleBlock, block_id)
-    if block is None:
+    if block is None or block.user_id != auth_user_id:
         raise HTTPException(status_code=404, detail="block not found")
-    if start_at:
+    if start_at is not None:
         block.start_at = start_at
-    if end_at:
+    if end_at is not None:
         block.end_at = end_at
-    if status:
+    if status is not None:
+        if status not in {"proposed", "committed", "completed"}:
+            raise HTTPException(status_code=422, detail="invalid block status")
         block.status = status
+    if _aware(block.end_at) <= _aware(block.start_at):
+        raise HTTPException(status_code=422, detail="end_at must be after start_at")
     db.commit()
     db.refresh(block)
     return _block_json(block)
@@ -265,7 +293,13 @@ def patch_block(
 
 # ---------------------------------------------------------------- brief
 @app.get("/users/{user_id}/brief/{date}")
-def get_time_brief(user_id: str, date: str, db: Session = Depends(get_session)) -> dict:
+def get_time_brief(
+    user_id: str,
+    date: str,
+    db: Session = Depends(get_session),
+    auth_user_id: str = Depends(authenticated_user),
+) -> dict:
+    require_user_id(user_id, auth_user_id)
     _ensure_user(db, user_id)
     try:
         day = datetime.fromisoformat(date).date()
@@ -308,6 +342,8 @@ def get_time_brief(user_id: str, date: str, db: Session = Depends(get_session)) 
 # ---------------------------------------------------------------- demo seed
 @app.post("/demo/seed")
 def demo_seed(db: Session = Depends(get_session)) -> dict:
+    if settings.auth_mode != "dev":
+        raise HTTPException(status_code=404, detail="Not found")
     user_id = "u_demo"
     _ensure_user(db, user_id)
     now = datetime.now(timezone.utc)

@@ -64,6 +64,27 @@ def _token() -> str:
     return r.json()["token"]
 
 
+def test_rest_auth_blocks_anonymous_and_cross_user_access():
+    if not _auth_enforced():
+        pytest.skip("run with bearer auth enabled to test REST authorization")
+    token = _token()
+    headers = {"Authorization": f"Bearer {token}"}
+    own = httpx.get(
+        f"{FINANCE_URL}/users/{TEST_USER_ID}/balance", headers=headers, timeout=10
+    )
+    other = httpx.get(
+        f"{FINANCE_URL}/users/not-the-authenticated-user/balance",
+        headers=headers,
+        timeout=10,
+    )
+    anonymous = httpx.get(
+        f"{FINANCE_URL}/users/{TEST_USER_ID}/balance", timeout=10
+    )
+    assert own.status_code == 200
+    assert other.status_code == 403
+    assert anonymous.status_code == 401
+
+
 async def _call_tool(session: ClientSession, name: str, args: dict) -> str:
     res = await session.call_tool(name, args)
     text = "".join(c.text or "" for c in res.content if getattr(c, "type") == "text")

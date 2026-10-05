@@ -29,6 +29,12 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from atlas_common.config import settings
+from atlas_common.auth import (
+    authenticated_user,
+    current_bearer,
+    require_user_id,
+    token_digest,
+)
 from atlas_common.db import get_session, init_db
 from atlas_common.models import AuthToken, McpToolCall, Transaction, User
 
@@ -45,6 +51,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def forward_auth_context(request, call_next):
+    scheme, separator, token = request.headers.get("authorization", "").partition(" ")
+    context_token = current_bearer.set(
+        token.strip() if scheme.lower() == "bearer" and separator else None
+    )
+    try:
+        return await call_next(request)
+    finally:
+        current_bearer.reset(context_token)
+
 
 @app.get("/health")
 def health() -> dict:
@@ -57,23 +74,23 @@ class UserIdIn(BaseModel):
 
 
 class TransactionIn(BaseModel):
-    user_id: str
+    user_id: str = Field(min_length=1, max_length=128)
     amount_ngn: float
-    category: str = "general"
+    category: str = Field(default="general", max_length=64)
     ts: datetime | None = None
-    source: str = "alexa"
-    idempotency_key: str | None = None
+    source: str = Field(default="alexa", max_length=64)
+    idempotency_key: str | None = Field(default=None, max_length=128)
 
 
 class AffordabilityIn(BaseModel):
-    user_id: str
-    amount_ngn: float = Field(gt=0)
-    category: str = "general"
+    user_id: str = Field(min_length=1, max_length=128)
+    amount_ngn: float = Field(gt=0, le=1e12)
+    category: str = Field(default="general", max_length=64)
 
 
 class TokenIn(BaseModel):
-    user_id: str
-    ttl_seconds: int = 3600
+    user_id: str = Field(min_length=1, max_length=128)
+    ttl_seconds: int = Field(default=3600, ge=60, le=3600)
 
 
 # ---------------------------------------------------------------- helpers
@@ -98,13 +115,23 @@ def _balance_of(db: Session, user_id: str) -> float:
 
 # ---------------------------------------------------------------- users
 @app.post("/users/{user_id}")
-def ensure_user(user_id: str, db: Session = Depends(get_session)) -> dict:
+def ensure_user(
+    user_id: str,
+    db: Session = Depends(get_session),
+    auth_user_id: str = Depends(authenticated_user),
+) -> dict:
+    require_user_id(user_id, auth_user_id)
     user = _ensure_user(db, user_id)
     return {"user_id": user.id, "locale": user.locale, "created_at": user.created_at.isoformat()}
 
 
 @app.get("/users/{user_id}/balance")
-def get_balance(user_id: str, db: Session = Depends(get_session)) -> dict:
+def get_balance(
+    user_id: str,
+    db: Session = Depends(get_session),
+    auth_user_id: str = Depends(authenticated_user),
+) -> dict:
+    require_user_id(user_id, auth_user_id)
     _ensure_user(db, user_id)
     balance = cache.get_or_set(f"balance:{user_id}", lambda: _balance_of(db, user_id), ttl=15)
     return {"user_id": user_id, "balance_ngn": round(float(balance), 2)}
@@ -114,9 +141,11 @@ def get_balance(user_id: str, db: Session = Depends(get_session)) -> dict:
 def list_transactions(
     user_id: str,
     db: Session = Depends(get_session),
-    limit: int = Query(100, le=1000),
-    offset: int = 0,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0, le=1_000_000),
+    auth_user_id: str = Depends(authenticated_user),
 ) -> dict:
+    require_user_id(user_id, auth_user_id)
     _ensure_user(db, user_id)
     rows = (
         db.query(Transaction)
@@ -143,8 +172,13 @@ def list_transactions(
 
 # ---------------------------------------------------------------- ledger
 @app.post("/transactions")
-def log_transaction(inp: TransactionIn, db: Session = Depends(get_session)) -> dict:
+def log_transaction(
+    inp: TransactionIn,
+    db: Session = Depends(get_session),
+    auth_user_id: str = Depends(authenticated_user),
+) -> dict:
     """Append-only write. Idempotent via (user_id, idempotency_key)."""
+    require_user_id(inp.user_id, auth_user_id)
     _ensure_user(db, inp.user_id)
 
     if inp.idempotency_key:
@@ -158,13 +192,15 @@ def log_transaction(inp: TransactionIn, db: Session = Depends(get_session)) -> d
         )
         if existing is not None:
             return {
-                "transaction": _tx(out:= existing),
+                "transaction": _tx(existing),
                 "new_balance": _balance_of(db, inp.user_id),
                 "updated_risk_score": riskmod.compute_risk(db, inp.user_id)["score"],
                 "duplicate": True,
             }
     if inp.amount_ngn == 0:
         raise HTTPException(status_code=422, detail="amount_ngn must be non-zero")
+    if abs(inp.amount_ngn) > 1e12:
+        raise HTTPException(status_code=422, detail="amount_ngn out of supported range")
 
     tx = Transaction(
         user_id=inp.user_id,
@@ -201,7 +237,12 @@ def _tx(t: Transaction) -> dict:
 
 # ---------------------------------------------------------------- affordability
 @app.post("/assess/affordability")
-def assess_affordability(inp: AffordabilityIn, db: Session = Depends(get_session)) -> dict:
+def assess_affordability(
+    inp: AffordabilityIn,
+    db: Session = Depends(get_session),
+    auth_user_id: str = Depends(authenticated_user),
+) -> dict:
+    require_user_id(inp.user_id, auth_user_id)
     _ensure_user(db, inp.user_id)
     balance = _balance_of(db, inp.user_id)
 
@@ -256,7 +297,9 @@ def get_risk(
     user_id: str,
     db: Session = Depends(get_session),
     window: str = Query("30d", pattern="^(7d|30d)$"),
+    auth_user_id: str = Depends(authenticated_user),
 ) -> dict:
+    require_user_id(user_id, auth_user_id)
     _ensure_user(db, user_id)
     result = riskmod.compute_risk(db, user_id, window=window)
     trend = _window_trend(db, user_id, limit=7)
@@ -264,7 +307,12 @@ def get_risk(
 
 
 @app.get("/users/{user_id}/risk/trend")
-def get_risk_trend(user_id: str, db: Session = Depends(get_session)) -> dict:
+def get_risk_trend(
+    user_id: str,
+    db: Session = Depends(get_session),
+    auth_user_id: str = Depends(authenticated_user),
+) -> dict:
+    require_user_id(user_id, auth_user_id)
     _ensure_user(db, user_id)
     return {"user_id": user_id, "points": riskmod.risk_trend(db, user_id)}
 
@@ -279,9 +327,13 @@ def _window_trend(db: Session, user_id: str, limit: int = 7) -> list[dict]:
 def list_tool_calls(
     db: Session = Depends(get_session),
     limit: int = Query(50, ge=1, le=500),
-    user_id: str | None = None,
+    user_id: str | None = Query(default=None, max_length=128),
+    auth_user_id: str = Depends(authenticated_user),
 ) -> dict:
     """Recent agent-tool activity — powers the dashboard's Agent Log screen."""
+    if user_id is not None:
+        require_user_id(user_id, auth_user_id)
+    user_id = auth_user_id
     q = db.query(McpToolCall).order_by(McpToolCall.id.desc())
     if user_id:
         q = q.filter(McpToolCall.user_id == user_id)
@@ -305,7 +357,12 @@ def list_tool_calls(
 
 # ---------------------------------------------------------------- brief
 @app.get("/users/{user_id}/brief")
-def get_finance_brief(user_id: str, db: Session = Depends(get_session)) -> dict:
+def get_finance_brief(
+    user_id: str,
+    db: Session = Depends(get_session),
+    auth_user_id: str = Depends(authenticated_user),
+) -> dict:
+    require_user_id(user_id, auth_user_id)
     _ensure_user(db, user_id)
     balance = _balance_of(db, user_id)
     risk = riskmod.compute_risk(db, user_id)
@@ -335,20 +392,25 @@ def get_finance_brief(user_id: str, db: Session = Depends(get_session)) -> dict:
 # ---------------------------------------------------------------- auth (dev)
 @app.post("/auth/token")
 def issue_token(inp: TokenIn, db: Session = Depends(get_session)) -> dict:
+    if settings.auth_mode != "dev":
+        raise HTTPException(status_code=404, detail="Not found")
     _ensure_user(db, inp.user_id)
     token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=inp.ttl_seconds)
     db.add(
         AuthToken(
-            token=token,
+            # Store a digest, not the bearer value: a database dump should not
+            # hand out working credentials. verify_bearer looks up by digest.
+            token=token_digest(token),
             user_id=inp.user_id,
-            expires_at=datetime.now(timezone.utc) + timedelta(seconds=inp.ttl_seconds),
+            expires_at=expires_at,
         )
     )
     db.commit()
     return {
         "token": token,
         "user_id": inp.user_id,
-        "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=inp.ttl_seconds)).isoformat(),
+        "expires_at": expires_at.isoformat(),
     }
 
 
@@ -356,6 +418,8 @@ def issue_token(inp: TokenIn, db: Session = Depends(get_session)) -> dict:
 @app.post("/demo/seed")
 def demo_seed(db: Session = Depends(get_session)) -> dict:
     """Idempotent-ish demo dataset: one user, three weeks of history + snapshots."""
+    if settings.auth_mode != "dev":
+        raise HTTPException(status_code=404, detail="Not found")
     user_id = "u_demo"
     _ensure_user(db, user_id)
 

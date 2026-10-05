@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 import httpx
 
 from atlas_common.audit import timed_tool_call
+from atlas_common.auth import current_bearer
 
 from orchestrator.tools_spec import tool_names
 
@@ -26,6 +27,11 @@ from atlas_common.config import settings
 FINANCE_URL = settings.finance_url
 SCHEDULING_URL = settings.scheduling_url
 _TIMEOUT = httpx.Timeout(20.0)
+
+
+def _headers() -> dict[str, str]:
+    token = current_bearer.get()
+    return {"Authorization": f"Bearer {token}"} if token else {}
 
 
 def _state_path(user_id: str) -> str:
@@ -65,7 +71,7 @@ class SessionMemory:
 
 def _post(url: str, payload: dict) -> dict:
     try:
-        r = httpx.post(url, json=payload, timeout=_TIMEOUT)
+        r = httpx.post(url, json=payload, headers=_headers(), timeout=_TIMEOUT)
         return r.json() if r.headers.get("content-type", "").startswith("application/json") else {"error": f"{r.status_code}: {r.text[:200]}"}
     except Exception as exc:  # backend down -> structured error, agent still answers
         return {"error": f"backend unreachable: {exc}"}
@@ -73,7 +79,7 @@ def _post(url: str, payload: dict) -> dict:
 
 def _get(url: str, params: dict | None = None) -> dict:
     try:
-        r = httpx.get(url, params=params, timeout=_TIMEOUT)
+        r = httpx.get(url, params=params, headers=_headers(), timeout=_TIMEOUT)
         return r.json() if r.headers.get("content-type", "").startswith("application/json") else {"error": f"{r.status_code}: {r.text[:200]}"}
     except Exception as exc:
         return {"error": f"backend unreachable: {exc}"}

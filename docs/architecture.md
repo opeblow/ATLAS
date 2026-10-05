@@ -94,15 +94,19 @@ with an idempotency key so voice retries never double-book.
 
 ## 5. Auth & identity
 
-- `/auth/token` (dev) issues a bearer token bound to a user.
-- Every request to the MCP transport is header-validated (401 otherwise) — the
-  middleware reads only the `Authorization` header, never the body, so the
-  Streamable HTTP SSE stream is untouched.
-- In-tool, `enforce_identity(user_id)` reads the request via
-  `get_http_request()` and refuses to run if the arg doesn't match the token's
-  user (see `mcp-server/.../tools/identity.py`).
-- Postgres can hold real session-token tables; the interface (`AuthToken`) is
-  shared in `atlas_common.models`.
+- Production defaults to fail-closed Cognito access-token verification (RS256,
+  issuer, expiry, `token_use=access`, app-client ID, and JWKS signature).
+- The browser uses OAuth authorization-code + PKCE and keeps the short-lived
+  access token in memory. Cognito subject is the tenant identity; caller-supplied
+  user IDs are checked against it on finance and scheduling routes, `/api/ask`,
+  and MCP tools.
+- The development token issuer and demo-seed routes are disabled unless
+  `ATLAS_AUTH_MODE=dev` is explicitly selected. Do not use dev mode in a hosted
+  environment.
+- Schedule block updates are scoped to the authenticated owner.
+- JWT verification alone does not establish production readiness. Configure
+  Cognito callback/domain settings, protect browser clients against XSS, apply
+  database migrations, and validate all deployment routes and dependencies.
 
 ## 6. SQLite → Postgres
 

@@ -17,14 +17,14 @@ export default function TrendLine({ points }: { points: { score: number }[] }) {
   return (
     <div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label="risk trend">
-        <path d={path} fill="none" stroke="#f97316" strokeWidth="2" />
+        <path d={path} fill="none" stroke="currentColor" strokeWidth="2" />
         {scores.map((v, i) => (
-          <circle key={i} cx={px(i)} cy={py(v)} r="2.5" fill="#f97316" />
+          <circle key={i} cx={px(i)} cy={py(v)} r="2.5" fill="currentColor" />
         ))}
       </svg>
-      <div className="mono" style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#82828a" }}>
+      <div className="mono" style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--fg-faint)" }}>
         <span>
-          {first.toFixed(2)} → <span style={{ color: last >= first ? "#fb7185" : "#34d399" }}>{last.toFixed(2)}</span>
+          {first.toFixed(2)} → <span style={{ color: last >= first ? "var(--negative)" : "var(--positive)" }}>{last.toFixed(2)}</span>
         </span>
         <span>{last >= first ? "trending up" : "trending down"}</span>
       </div>

@@ -269,7 +269,7 @@ export default function DashboardView() {
             onClick={handleTestIdempotency}
             title="Fire duplicate request to verify idempotency"
           >
-            <IconZap size={14} color="#ea580c" /> Test Idempotency
+            <IconZap size={14} /> Test Idempotency
           </button>
         </div>
       </div>
@@ -287,20 +287,20 @@ export default function DashboardView() {
       {idempotencyResult && (
         <div
           style={{
-            background: "#fff7ed",
-            border: "1px solid #ffedd5",
+            background: "var(--warning-wash)",
+            border: "1px solid var(--warning-wash)",
             borderRadius: 16,
             padding: 16,
             marginBottom: 24,
             fontSize: 13,
-            color: "#ea580c",
+            color: "currentColor",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <IconShield size={18} color="#ea580c" />
+            <IconShield size={18} />
             <strong>Idempotency Verification:</strong>{" "}
             {idempotencyResult.firstCall ? (
               <span>
@@ -314,9 +314,9 @@ export default function DashboardView() {
           </div>
           <button
             onClick={() => setIdempotencyResult(null)}
-            style={{ background: "none", border: "none", color: "#ea580c", fontWeight: 700, cursor: "pointer" }}
+            style={{ background: "none", border: "none", color: "currentColor", fontWeight: 700, cursor: "pointer" }}
           >
-            <IconClose size={16} color="#ea580c" />
+            <IconClose size={16} />
           </button>
         </div>
       )}
@@ -326,7 +326,7 @@ export default function DashboardView() {
         {/* Card 1: Total Balance */}
         <div className="kpi-card">
           <div className="kpi-header-row">
-            <div className="kpi-icon-badge"><IconEye size={18} color="#ea580c" /></div>
+            <div className="kpi-icon-badge"><IconEye size={18} /></div>
             <div className="kpi-label">Total Balance</div>
           </div>
           <div className="kpi-value">{balanceVal == null ? "—" : ngn(balanceVal)}</div>
@@ -335,7 +335,7 @@ export default function DashboardView() {
               {balanceVal == null ? "Unavailable" : "Live backend"}
             </span>
             <svg viewBox="0 0 50 16" width="50" height="16">
-              <path d="M0,12 Q12,2 25,10 T50,2" fill="none" stroke="#10b981" strokeWidth="2" />
+              <path d="M0,12 Q12,2 25,10 T50,2" fill="none" stroke="var(--positive)" strokeWidth="2" />
             </svg>
           </div>
         </div>
@@ -343,14 +343,14 @@ export default function DashboardView() {
         {/* Card 2: 7-Day Spending */}
         <div className="kpi-card">
           <div className="kpi-header-row">
-            <div className="kpi-icon-badge" style={{ background: "#fff7ed", color: "#ea580c" }}><IconWallet size={18} color="#ea580c" /></div>
+            <div className="kpi-icon-badge" style={{ background: "var(--warning-wash)", color: "currentColor" }}><IconWallet size={18} /></div>
             <div className="kpi-label">7-Day Spend</div>
           </div>
           <div className="kpi-value">{spend7d == null ? "—" : ngn(spend7d)}</div>
           <div className="kpi-trend-row">
             <span className="trend-down">Rolling window</span>
             <svg viewBox="0 0 50 16" width="50" height="16">
-              <path d="M0,4 Q12,14 25,6 T50,12" fill="none" stroke="#10b981" strokeWidth="2" />
+              <path d="M0,4 Q12,14 25,6 T50,12" fill="none" stroke="var(--positive)" strokeWidth="2" />
             </svg>
           </div>
         </div>
@@ -358,7 +358,7 @@ export default function DashboardView() {
         {/* Card 3: Risk Score */}
         <div className="kpi-card">
           <div className="kpi-header-row">
-            <div className="kpi-icon-badge"><IconShield size={18} color="#ea580c" /></div>
+            <div className="kpi-icon-badge"><IconShield size={18} /></div>
             <div className="kpi-label">Risk Score</div>
           </div>
           <div className="kpi-value">{riskScore == null ? "—" : riskScore.toFixed(2)}</div>
@@ -367,7 +367,7 @@ export default function DashboardView() {
               <span className="muted">Unavailable</span>
             ) : (
               <>
-                <span style={{ color: riskScore > 0.6 ? "#ef4444" : "#10b981", fontSize: 11, fontWeight: 700 }}>
+                <span style={{ color: riskScore > 0.6 ? "var(--negative)" : "var(--positive)", fontSize: 11, fontWeight: 700 }}>
                   {healthLabel}
                 </span>
                 <div className="progress-track-bar" style={{ height: 4 }}>
@@ -375,7 +375,7 @@ export default function DashboardView() {
                     className="progress-fill-bar"
                     style={{
                       width: `${Math.round(riskScore * 100)}%`,
-                      background: riskScore > 0.6 ? "#ef4444" : "#10b981",
+                      background: riskScore > 0.6 ? "var(--negative)" : "var(--positive)",
                     }}
                   />
                 </div>
@@ -387,14 +387,14 @@ export default function DashboardView() {
         {/* Card 4: Next Deadline */}
         <div className="kpi-card">
           <div className="kpi-header-row">
-            <div className="kpi-icon-badge"><IconClock size={18} color="#ea580c" /></div>
+            <div className="kpi-icon-badge"><IconClock size={18} /></div>
             <div className="kpi-label">Next Deadline</div>
           </div>
           <div className="kpi-value" style={{ fontSize: 18, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
             {nextDeadlines[0]?.title ?? "No upcoming deadlines"}
           </div>
           <div className="kpi-trend-row">
-            <span className="trend-up" style={{ color: "#ea580c" }}>
+            <span className="trend-up" style={{ color: "currentColor" }}>
               {nextDeadlines[0]?.due_at ? nextDeadlines[0].due_at.slice(0, 10) : "No due date"}
             </span>
           </div>
@@ -440,22 +440,22 @@ export default function DashboardView() {
 
           <div className="quick-actions-list">
             <button className="quick-action-btn" onClick={() => setShowTxModal(true)}>
-              <span className="quick-action-icon"><IconWallet size={16} color="#ea580c" /></span>
+              <span className="quick-action-icon"><IconWallet size={16} /></span>
               <span>Log a transaction</span>
             </button>
 
             <button className="quick-action-btn" onClick={() => setShowDeadlineModal(true)}>
-              <span className="quick-action-icon"><IconBook size={16} color="#ea580c" /></span>
+              <span className="quick-action-icon"><IconBook size={16} /></span>
               <span>Create a deadline</span>
             </button>
 
             <button className="quick-action-btn" onClick={handleTestIdempotency}>
-              <span className="quick-action-icon"><IconZap size={16} color="#ea580c" /></span>
+              <span className="quick-action-icon"><IconZap size={16} /></span>
               <span>Test Idempotency</span>
             </button>
 
             <Link href="/time" className="quick-action-btn">
-              <span className="quick-action-icon"><IconCalendar size={16} color="#ea580c" /></span>
+              <span className="quick-action-icon"><IconCalendar size={16} /></span>
               <span>View calendar plan</span>
             </Link>
           </div>
@@ -465,10 +465,10 @@ export default function DashboardView() {
         <div className="card-container">
           <div className="card-header-flex">
             <div>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "#ea580c", textTransform: "uppercase" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "currentColor", textTransform: "uppercase" }}>
                 • Financial Health
               </span>
-              <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: "var(--fg-muted)", marginTop: 2 }}>
                 {riskScore == null
                   ? "Risk assessment unavailable."
                   : riskScore < 0.4
@@ -495,14 +495,14 @@ export default function DashboardView() {
                   <path
                     d="M 20 80 A 60 60 0 0 1 140 80"
                     fill="none"
-                    stroke="#f1f5f9"
+                    stroke="var(--border)"
                     strokeWidth="12"
                     strokeLinecap="round"
                   />
                   <path
                     d="M 20 80 A 60 60 0 0 1 140 80"
                     fill="none"
-                    stroke={riskScore > 0.6 ? "#ef4444" : "#10b981"}
+                    stroke={riskScore > 0.6 ? "var(--negative)" : "var(--positive)"}
                     strokeWidth="12"
                     strokeLinecap="round"
                     strokeDasharray={`${Math.round(healthScore * 1.85)} 200`}
@@ -513,8 +513,8 @@ export default function DashboardView() {
                 <span
                   className="health-status-badge"
                   style={{
-                    background: riskScore > 0.6 ? "#fef2f2" : "#ecfdf5",
-                    color: riskScore > 0.6 ? "#ef4444" : "#10b981",
+                    background: riskScore > 0.6 ? "var(--negative-wash)" : "var(--positive-wash)",
+                    color: riskScore > 0.6 ? "var(--negative)" : "var(--positive)",
                   }}
                 >
                   {healthLabel}
@@ -535,7 +535,7 @@ export default function DashboardView() {
         <div className="card-container">
           <div className="card-header-flex">
             <h3 className="card-header-title">Spending Overview (Live)</h3>
-            <span style={{ fontSize: 12, color: "#64748b" }}>Last 7 days</span>
+            <span style={{ fontSize: 12, color: "var(--fg-muted)" }}>Last 7 days</span>
           </div>
 
           <div
@@ -605,7 +605,7 @@ export default function DashboardView() {
               nextDeadlines.slice(0, 3).map((d: any) => (
                 <div key={d.id || d.title} className="bill-item-row">
                   <div className="bill-icon-title">
-                    <div className="bill-icon-badge"><IconBook size={16} color="#ea580c" /></div>
+                    <div className="bill-icon-badge"><IconBook size={16} /></div>
                     <div>
                       <div className="bill-title">{d.title}</div>
                       <div className="bill-due-date">Due: {d.due_at ? d.due_at.slice(0, 10) : "Upcoming"}</div>
@@ -619,7 +619,7 @@ export default function DashboardView() {
                 </div>
               ))
             ) : (
-              <p style={{ fontSize: 13, color: "#64748b" }}>No upcoming deadlines.</p>
+              <p style={{ fontSize: 13, color: "var(--fg-muted)" }}>No upcoming deadlines.</p>
             )}
           </div>
         </div>
@@ -627,8 +627,8 @@ export default function DashboardView() {
         {/* Motivation Card */}
         <div className="motivation-card-orange">
           <div>
-            <div className="kpi-icon-badge" style={{ width: 36, height: 36, fontSize: 18 }}><IconTarget size={20} color="#ea580c" /></div>
-            <h3 style={{ fontSize: 18, fontWeight: 800, color: "#0f172a", margin: "14px 0 4px" }}>
+            <div className="kpi-icon-badge" style={{ width: 36, height: 36, fontSize: 18 }}><IconTarget size={20} /></div>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: "var(--fg)", margin: "14px 0 4px" }}>
               Stay consistent.
             </h3>
             <p className="motivation-quote-text">
@@ -654,16 +654,16 @@ export default function DashboardView() {
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h3 id="transaction-dialog-title" style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
-                <IconWallet size={20} color="#ea580c" /> Log Transaction
+              <h3 id="transaction-dialog-title" style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "var(--fg)", display: "flex", alignItems: "center", gap: 8 }}>
+                <IconWallet size={20} /> Log Transaction
               </h3>
               <button type="button" aria-label="Close transaction dialog" onClick={() => setShowTxModal(false)} style={{ border: "none", background: "none", cursor: "pointer" }}>
-                <IconClose size={18} color="#64748b" />
+                <IconClose size={18} color="var(--fg-muted)" />
               </button>
             </div>
             <form onSubmit={handleLogTransaction} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
-                <label htmlFor="transaction-amount" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 4 }}>
+                <label htmlFor="transaction-amount" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--fg-muted)", marginBottom: 4 }}>
                   Amount (NGN)
                 </label>
                 <input
@@ -672,20 +672,20 @@ export default function DashboardView() {
                   placeholder="e.g. 5000"
                   value={txAmount}
                   onChange={(e) => setTxAmount(e.target.value)}
-                  style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #e2e8f0" }}
+                  style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid var(--border)" }}
                   required
                 />
               </div>
 
               <div>
-                <label htmlFor="transaction-category" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 4 }}>
+                <label htmlFor="transaction-category" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--fg-muted)", marginBottom: 4 }}>
                   Category
                 </label>
                 <select
                   id="transaction-category"
                   value={txCategory}
                   onChange={(e) => setTxCategory(e.target.value)}
-                  style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #e2e8f0" }}
+                  style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid var(--border)" }}
                 >
                   <option value="food">Food & Dining</option>
                   <option value="transport">Transport</option>
@@ -723,16 +723,16 @@ export default function DashboardView() {
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h3 id="deadline-dialog-title" style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
-                <IconBook size={20} color="#ea580c" /> Create Deadline
+              <h3 id="deadline-dialog-title" style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "var(--fg)", display: "flex", alignItems: "center", gap: 8 }}>
+                <IconBook size={20} /> Create Deadline
               </h3>
               <button type="button" aria-label="Close deadline dialog" onClick={() => setShowDeadlineModal(false)} style={{ border: "none", background: "none", cursor: "pointer" }}>
-                <IconClose size={18} color="#64748b" />
+                <IconClose size={18} color="var(--fg-muted)" />
               </button>
             </div>
             <form onSubmit={handleAddDeadline} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
-                <label htmlFor="deadline-title" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 4 }}>
+                <label htmlFor="deadline-title" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--fg-muted)", marginBottom: 4 }}>
                   Deadline Title
                 </label>
                 <input
@@ -741,13 +741,13 @@ export default function DashboardView() {
                   placeholder="e.g. Physics Midterm Exam"
                   value={dlTitle}
                   onChange={(e) => setDlTitle(e.target.value)}
-                  style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #e2e8f0" }}
+                  style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid var(--border)" }}
                   required
                 />
               </div>
 
               <div>
-                <label htmlFor="deadline-date" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 4 }}>
+                <label htmlFor="deadline-date" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--fg-muted)", marginBottom: 4 }}>
                   Due Date
                 </label>
                 <input
@@ -755,7 +755,7 @@ export default function DashboardView() {
                   type="date"
                   value={dlDate}
                   onChange={(e) => setDlDate(e.target.value)}
-                  style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #e2e8f0" }}
+                  style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid var(--border)" }}
                   required
                 />
               </div>

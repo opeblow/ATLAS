@@ -16,6 +16,7 @@ import httpx
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from atlas_common.auth import current_bearer
 from atlas_common.config import settings
 from atlas_common.models import RiskSnapshot, Transaction
 
@@ -140,7 +141,14 @@ def _std(values: list[float]) -> float:
 
 
 def _call_risk_model(agg: dict) -> tuple[float, list[dict]]:
-    r = httpx.post(f"{settings.risk_model_url}/score", json=agg, timeout=5.0)
+    token = current_bearer.get()
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    r = httpx.post(
+        f"{settings.risk_model_url}/score",
+        json=agg,
+        headers=headers,
+        timeout=5.0,
+    )
     r.raise_for_status()
     data = r.json()
     return float(data["score"]), data["factors"]

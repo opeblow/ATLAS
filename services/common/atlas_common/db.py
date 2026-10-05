@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 
 from sqlalchemy import create_engine
@@ -16,9 +17,13 @@ class Base(DeclarativeBase):
 def _engine_kwargs() -> dict:
     if settings.db_url.startswith("sqlite"):
         return {"connect_args": {"check_same_thread": False}}
+    pool_size = int(os.getenv("ATLAS_DB_POOL_SIZE", "5"))
+    max_overflow = int(os.getenv("ATLAS_DB_MAX_OVERFLOW", "5"))
+    if pool_size < 1 or max_overflow < 0:
+        raise ValueError("ATLAS_DB_POOL_SIZE must be positive and ATLAS_DB_MAX_OVERFLOW non-negative")
     return {
-        "pool_size": 25,
-        "max_overflow": 50,
+        "pool_size": pool_size,
+        "max_overflow": max_overflow,
         "pool_pre_ping": True,
         "pool_recycle": 1800,
     }

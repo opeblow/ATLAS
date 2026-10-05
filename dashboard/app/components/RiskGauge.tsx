@@ -2,7 +2,7 @@ export default function RiskGauge({ score }: { score: number }) {
   const pct = Math.max(0, Math.min(1, score));
   const angle = 180 * pct;
   const label = pct < 0.4 ? "low" : pct < 0.7 ? "elevated" : "high";
-  const col = pct < 0.4 ? "#34d399" : pct < 0.7 ? "#fbbf24" : "#fb7185";
+  const col = pct < 0.4 ? "var(--positive)" : pct < 0.7 ? "var(--warning)" : "var(--negative)";
 
   const needleX = 90 + 72 * Math.cos(Math.PI - angle * (Math.PI / 180));
   const needleY = 88 - 72 * Math.sin(Math.PI - angle * (Math.PI / 180));
@@ -13,7 +13,7 @@ export default function RiskGauge({ score }: { score: number }) {
         <path
           d="M16 88 A72 72 0 0 1 164 88"
           fill="none"
-          stroke="#1f1f24"
+          stroke="var(--fg)"
           strokeWidth="10"
           strokeLinecap="round"
         />

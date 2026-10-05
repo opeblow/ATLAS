@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
-import { ask, capabilities, checkServicesHealth, DEFAULT_USER, type AskReply } from "../lib/api";
+import { ask, capabilities, checkServicesHealth, type AskReply } from "../lib/api";
+import { beginSignIn, getAuthenticatedUserId, signOut } from "../lib/auth";
 
 const ATLAS_URL = process.env.NEXT_PUBLIC_ATLAS_URL || "";
 import {
@@ -37,7 +38,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [isAsking, setIsAsking] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [activeUser, setActiveUser] = useState(DEFAULT_USER);
+  const [activeUser, setActiveUser] = useState("");
+  const [authReady, setAuthReady] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const settingsDialogRef = useRef<HTMLDivElement>(null);
   const [caps, setCaps] = useState<Record<string, { mode: string; reason?: string }> | null>(null);
@@ -48,12 +51,22 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     { name: "mcp", port: 8003, online: true },
   ]);
 
+  useEffect(() => {
+    try {
+      setActiveUser(getAuthenticatedUserId());
+    } catch {
+      setActiveUser("");
+    } finally {
+      setAuthReady(true);
+    }
+  }, []);
+
   // Which capabilities are live vs simulated, so the demo never implies a
   // real Bedrock/AWS call happened.
   useEffect(() => {
-    if (!ATLAS_URL) return;
+    if (!ATLAS_URL || !activeUser) return;
     capabilities().then(setCaps).catch(() => setCaps(null));
-  }, []);
+  }, [activeUser]);
 
   // Poll service health
   useEffect(() => {
@@ -141,6 +154,29 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     }
   };
 
+  if (!authReady) {
+    return <main className="auth-gate"><p>Checking your ATLAS session…</p></main>;
+  }
+
+  if (!activeUser) {
+    return (
+      <main className="auth-gate">
+        <section className="auth-card">
+          <span className="brand-dot" />
+          <h1>Sign in to ATLAS</h1>
+          <p>Your finances and schedule are private to your account.</p>
+          {authError && <p role="alert" className="auth-error">{authError}</p>}
+          <button
+            className="btn-orange-pill"
+            onClick={() => beginSignIn().catch((error: Error) => setAuthError(error.message))}
+          >
+            Continue with Amazon Cognito
+          </button>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <div className={`dashboard-layout ${isDarkMode ? "dark-theme" : ""}`}>
       {/* ---------------- 1. LEFT SIDEBAR ---------------- */}
@@ -188,8 +224,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Real Service Health Strip */}
-        <div style={{ paddingTop: 16, borderTop: "1px solid #f1f5f9" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 8, padding: "0 8px", letterSpacing: "0.05em" }}>
+        <div style={{ paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--fg-faint)", marginBottom: 8, padding: "0 8px", letterSpacing: "0.05em" }}>
             SERVICE HEALTH
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "0 8px" }}>
@@ -207,10 +243,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                   border: `1px solid ${s.online ? "rgba(16, 185, 129, 0.2)" : "rgba(239, 68, 68, 0.2)"}`,
                 }}
               >
-                <span style={{ color: s.online ? "#10b981" : "#ef4444", fontWeight: 600 }}>
+                <span style={{ color: s.online ? "var(--positive)" : "var(--negative)", fontWeight: 600 }}>
                   ● {s.name}
                 </span>
-                <span style={{ color: "#94a3b8", fontSize: 10 }}>:{s.port}</span>
+                <span style={{ color: "var(--fg-faint)", fontSize: 10 }}>:{s.port}</span>
               </div>
             ))}
           </div>
@@ -222,7 +258,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         {/* Top Navbar */}
         <header className="dash-topnav">
           <label className="dash-search-box">
-            <IconSearch size={16} color="#94a3b8" />
+            <IconSearch size={16} color="var(--fg-faint)" />
             <input
               type="text"
               className="dash-search-input"
@@ -236,29 +272,14 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           <div className="dash-topnav-right">
             <div className="date-badge-pill">
               <span>{new Date().toLocaleDateString("en-NG", { weekday: "long", day: "numeric", month: "long" })}</span>
-              <IconCalendar size={14} color="#64748b" />
+              <IconCalendar size={14} color="var(--fg-muted)" />
             </div>
 
-            {/* User Switcher */}
-            <select
-              value={activeUser}
-              onChange={(e) => setActiveUser(e.target.value)}
-              aria-label="Active demo user"
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                border: "1px solid #e2e8f0",
-                borderRadius: 99,
-                padding: "4px 12px",
-                background: "#ffffff",
-                color: "#0f172a",
-                cursor: "pointer",
-              }}
-            >
-              <option value="u_demo">u_demo</option>
-              <option value="u_alex">u_alex</option>
-              <option value="u_sarah">u_sarah</option>
-            </select>
+            <span className="user-profile-badge" title="Authenticated with Cognito">
+              <IconUser size={18} />
+              <span className="user-name-text">Signed in</span>
+            </span>
+            <button className="btn-orange-pill" onClick={signOut}>Sign out</button>
 
             <button
               className="icon-btn-circle"
@@ -270,15 +291,6 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               {isDarkMode ? <IconMoon size={18} /> : <IconSun size={18} />}
             </button>
 
-            <div className="user-profile-badge">
-              <img
-                src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80"
-                alt=""
-                className="user-avatar-img"
-              />
-              <span className="user-name-text">Opeyemi</span>
-              <span style={{ fontSize: 10, color: "#94a3b8" }}>▾</span>
-            </div>
           </div>
         </header>
 
@@ -293,7 +305,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             title="Ask Atlas by voice"
             aria-label={isListening ? "Stop voice input" : "Start voice input"}
             aria-pressed={isListening}
-            style={{ background: isListening ? "#10b981" : "#ea580c" }}
+            style={{ background: isListening ? "var(--positive)" : "currentColor" }}
           >
             <IconMic size={18} color="#ffffff" />
           </button>
@@ -310,9 +322,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           />
           {isListening && (
             <div className="soundwave-bars" style={{ height: 12, marginRight: 8 }}>
-              <span className="soundwave-bar" style={{ background: "#10b981" }} />
-              <span className="soundwave-bar" style={{ background: "#10b981" }} />
-              <span className="soundwave-bar" style={{ background: "#10b981" }} />
+              <span className="soundwave-bar" style={{ background: "var(--positive)" }} />
+              <span className="soundwave-bar" style={{ background: "var(--positive)" }} />
+              <span className="soundwave-bar" style={{ background: "var(--positive)" }} />
             </div>
           )}
           <button
@@ -356,37 +368,37 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <h3 id="atlas-settings-title" style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
-                <IconSettings size={22} color="#ea580c" /> ATLAS Settings
+              <h3 id="atlas-settings-title" style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "var(--fg)", display: "flex", alignItems: "center", gap: 8 }}>
+                <IconSettings size={22} /> ATLAS Settings
               </h3>
               <button type="button" aria-label="Close settings" onClick={() => setShowSettingsModal(false)} style={{ border: "none", background: "none", fontSize: 18, cursor: "pointer" }}>
-                <IconClose size={18} color="#64748b" />
+                <IconClose size={18} color="var(--fg-muted)" />
               </button>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 16, fontSize: 14 }}>
               <div>
-                <label style={{ display: "block", fontWeight: 600, marginBottom: 4, color: "#475569" }}>Active User ID</label>
-                <input type="text" value={activeUser} readOnly style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #e2e8f0", background: "#f8fafc" }} />
+                <label style={{ display: "block", fontWeight: 600, marginBottom: 4, color: "var(--fg-muted)" }}>Active User ID</label>
+                <input type="text" value={activeUser} readOnly style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid var(--border)", background: "var(--bg-inset)" }} />
               </div>
               <div>
-                <label style={{ display: "block", fontWeight: 600, marginBottom: 4, color: "#475569" }}>Backend origin</label>
+                <label style={{ display: "block", fontWeight: 600, marginBottom: 4, color: "var(--fg-muted)" }}>Backend origin</label>
                 <input
                   type="text"
                   value={ATLAS_URL || "local stack (4 ports)"}
                   readOnly
-                  style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #e2e8f0", background: "#f8fafc" }}
+                  style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid var(--border)", background: "var(--bg-inset)" }}
                 />
               </div>
               {caps &&
                 Object.entries(caps).map(([name, c]) => (
                   <div key={name}>
-                    <label style={{ display: "block", fontWeight: 600, marginBottom: 4, color: "#475569" }}>
+                    <label style={{ display: "block", fontWeight: 600, marginBottom: 4, color: "var(--fg-muted)" }}>
                       {name.replace(/_/g, " ")}{" "}
                       <span
                         className="mono"
                         style={{
                           fontSize: 11,
-                          color: c.mode === "live" || c.mode === "trained" ? "#10b981" : "#d97706",
+                          color: c.mode === "live" || c.mode === "trained" ? "var(--positive)" : "var(--warning)",
                         }}
                       >
                         {c.mode}

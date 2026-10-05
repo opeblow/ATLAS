@@ -15,33 +15,16 @@ Design:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from typing import Any
 
-from atlas_common.db import SessionLocal
-from atlas_common.models import AuthToken
+from atlas_common.auth import current_bearer, resolve_bearer_user_id
 
 from atlas_mcp_server.config import mcp_settings
 
 
 def resolve_user_id(token: str | None) -> str | None:
-    """Return the user_id bound to a valid, unexpired token."""
-    if not token:
-        return None
-    db = SessionLocal()
-    try:
-        row = db.query(AuthToken).filter(AuthToken.token == token).first()
-        if row is None:
-            return None
-        if row.expires_at.tzinfo is None:
-            expires = row.expires_at.replace(tzinfo=timezone.utc)
-        else:
-            expires = row.expires_at
-        if expires < datetime.now(timezone.utc):
-            return None
-        return row.user_id
-    finally:
-        db.close()
+    """Return the subject bound to a valid Cognito or development token."""
+    return resolve_bearer_user_id(token)
 
 
 def _unauthorized_body() -> bytes:
@@ -90,16 +73,19 @@ class BearerAuthMiddleware:
 
         headers = dict(scope.get("headers", []))
         authz = headers.get(b"authorization") or b""
-        token = (
-            authz.decode("utf-8").split(" ", 1)[1].strip()
-            if authz.lower().startswith(b"bearer")
-            else None
-        )
-        if resolve_user_id(token) is None:
+        parts = authz.decode("utf-8", errors="ignore").split(" ", 1)
+        token = parts[1].strip() if len(parts) == 2 and parts[0].lower() == "bearer" else None
+        authenticated_user_id = resolve_user_id(token)
+        if authenticated_user_id is None:
             await _reject(send)
             return
 
-        await self.app(scope, receive, send)
+        context_token = current_bearer.set(token)
+        scope = {**scope, "state": {**scope.get("state", {}), "authenticated_user_id": authenticated_user_id}}
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            current_bearer.reset(context_token)
 
     @staticmethod
     async def _health(send) -> None:

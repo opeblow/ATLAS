@@ -9,7 +9,9 @@ const nextConfig: NextConfig = {
   trailingSlash: true,
   images: { unoptimized: true },
   compress: true,
-  poweredByHeader: false,
+  // No server runtime, so headers()/poweredByHeader are inert here. Security
+  // headers (CSP, HSTS, frame-options) are served from public/_headers, which
+  // Cloudflare Pages and Netlify both honour for static exports.
   reactStrictMode: true,
 };
 

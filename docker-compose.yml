@@ -1,4 +1,15 @@
-version: '3.8'
+# ATLAS local/production-shaped stack.
+#
+# Topology note: atlas-edge is the only service published to the host (plus the
+# dashboard). The four application services use `expose:` instead of `ports:`,
+# which keeps them on the internal compose network only. CORS is not access
+# control -- a non-browser client ignores it -- so publishing 8000-8003 would let
+# anything that can reach this host skip the edge entirely, and with it the rate
+# limiter, the 64 KiB body ceiling, and request normalisation.
+#
+# REDIS_URL is set on edge so the limiter counts across all uvicorn workers.
+# Without it each worker keeps a private counter and the effective limit silently
+# multiplies by the worker count.
 
 services:
   postgres:
@@ -9,6 +20,8 @@ services:
       POSTGRES_USER: atlas_user
       POSTGRES_PASSWORD: atlas_password
       POSTGRES_DB: atlas_prod
+    # Published for psql/dBeaver during development. Drop this mapping in any
+    # deployment reachable from outside the host.
     ports:
       - "5432:5432"
     volumes:
@@ -23,8 +36,11 @@ services:
     image: redis:7-alpine
     container_name: atlas-redis
     restart: always
-    ports:
-      - "6379:6379"
+    # Not published: only the edge needs it, over the internal network. An
+    # unauthenticated Redis on a routable port is a remote-code-execution path.
+    expose:
+      - "6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -33,15 +49,14 @@ services:
 
   risk-model:
     build:
-      context: ./services/risk-model
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/risk-model/Dockerfile
     container_name: atlas-risk-model
     restart: always
+    expose:
+      - "8000"
     environment:
       - PORT=8000
-      - WORKERS=4
-    ports:
-      - "8000:8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -50,8 +65,8 @@ services:
 
   finance-service:
     build:
-      context: ./services/finance-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/finance-service/Dockerfile
     container_name: atlas-finance-service
     restart: always
     depends_on:
@@ -59,13 +74,13 @@ services:
         condition: service_healthy
       risk-model:
         condition: service_healthy
+    expose:
+      - "8001"
     environment:
       - PORT=8001
       - ATLAS_DATABASE_URL=postgresql://atlas_user:atlas_password@postgres:5432/atlas_prod
       - RISK_MODEL_URL=http://risk-model:8000
-      - WORKERS=4
-    ports:
-      - "8001:8001"
+      - ATLAS_REQUIRE_AUTH=0
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 10s
@@ -74,19 +89,18 @@ services:
 
   scheduling-service:
     build:
-      context: ./services/scheduling-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/scheduling-service/Dockerfile
     container_name: atlas-scheduling-service
     restart: always
     depends_on:
       postgres:
         condition: service_healthy
+    expose:
+      - "8002"
     environment:
       - PORT=8002
       - ATLAS_DATABASE_URL=postgresql://atlas_user:atlas_password@postgres:5432/atlas_prod
-      - WORKERS=4
-    ports:
-      - "8002:8002"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
       interval: 10s
@@ -95,8 +109,8 @@ services:
 
   mcp-server:
     build:
-      context: ./mcp-server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: mcp-server/Dockerfile
     container_name: atlas-mcp-server
     restart: always
     depends_on:
@@ -104,15 +118,54 @@ services:
         condition: service_healthy
       scheduling-service:
         condition: service_healthy
+    expose:
+      - "8003"
     environment:
       - PORT=8003
       - FINANCE_SERVICE_URL=http://finance-service:8001
       - SCHEDULING_SERVICE_URL=http://scheduling-service:8002
-      - WORKERS=4
-    ports:
-      - "8003:8003"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # The single public entrypoint. Every request crosses the security middleware
+  # here, so this must sit in front of the four services.
+  edge:
+    build:
+      context: .
+      dockerfile: services/edge/Dockerfile
+    container_name: atlas-edge
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      risk-model:
+        condition: service_healthy
+      finance-service:
+        condition: service_healthy
+      scheduling-service:
+        condition: service_healthy
+      mcp-server:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - REDIS_URL=redis://redis:6379/0
+      - ATLAS_DATABASE_URL=postgresql://atlas_user:atlas_password@postgres:5432/atlas_prod
+      - ATLAS_RISK_MODEL_URL=http://risk-model:8000
+      - ATLAS_FINANCE_URL=http://finance-service:8001
+      - ATLAS_SCHEDULING_URL=http://scheduling-service:8002
+      # Local convenience stack: auth off. A real deployment sets
+      # ATLAS_AUTH_MODE=cognito and ATLAS_REQUIRE_AUTH=1 (see render.yaml).
+      - ATLAS_REQUIRE_AUTH=0
+      - ATLAS_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/edge/health"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -121,18 +174,16 @@ services:
     build:
       context: ./dashboard
       dockerfile: Dockerfile
+      # Baked into the bundle at build time; the Dockerfile fails without it.
+      args:
+        NEXT_PUBLIC_ATLAS_URL: http://localhost:8000
     container_name: atlas-dashboard
     restart: always
     depends_on:
-      - mcp-server
-    environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_FINANCE_URL=http://localhost:8001
-      - NEXT_PUBLIC_SCHEDULING_URL=http://localhost:8002
-      - NEXT_PUBLIC_RISK_URL=http://localhost:8000
-      - NEXT_PUBLIC_MCP_URL=http://localhost:8003
+      edge:
+        condition: service_healthy
     ports:
-      - "3000:3000"
+      - "3000:8080" # nginx-unprivileged listens on 8080 inside the container
 
 volumes:
   postgres_data:

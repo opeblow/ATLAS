@@ -5,6 +5,13 @@ on:
   push:
     branches: [main, master]
 
+# Default to read-only. Individual jobs opt in to more where they need it.
+permissions:
+  contents: read
+
+# Third-party actions are pinned to commit SHAs, not mutable tags. A tag like
+# @v4 can be repointed at new code by anyone able to push to that tag's repo,
+# and that code would then execute in this workflow. Dependabot bumps the SHAs.
 jobs:
   backend:
     name: backend · unit + e2e
@@ -14,9 +21,9 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
           cache: pip
@@ -41,6 +48,10 @@ jobs:
           cd ../../reasoning/bedrock-orchestrator
           python -m pytest tests -q
 
+      - name: Shared-library tests (auth + rate limiter)
+        working-directory: services/common
+        run: python -m pytest tests -q
+
       - name: Train the risk model (weights are gitignored, so CI trains them)
         working-directory: services/risk-model
         run: python -m app.train
@@ -48,6 +59,8 @@ jobs:
       - name: Boot the stack (risk → finance → scheduling → mcp)
         run: |
           export ATLAS_DATABASE_URL=sqlite:///$GITHUB_WORKSPACE/atlas_ci.db
+          # Auth stays off for this suite: the MCP e2e tests drive the stack with
+          # no credentials. Enforcing auth here would fail the suite, not harden it.
           export ATLAS_REQUIRE_AUTH=0
           cd services/risk-model
           (nohup python -m uvicorn app.main:app --port 8000 --log-level warning >/tmp/risk.log 2>&1 &)
@@ -85,9 +98,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: npm
@@ -103,15 +116,19 @@ jobs:
 
       - name: Build
         working-directory: dashboard
+        # prebuild (check-backend-url.mjs) requires this; without it the bundle
+        # would inline an unset origin and every fetch would hit localhost.
+        env:
+          NEXT_PUBLIC_ATLAS_URL: https://api.atlas.example.com
         run: npm run build
 
   terraform:
     name: infra · validate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: "1.8.5"
 
@@ -124,3 +141,35 @@ jobs:
         run: |
           terraform init -backend=false
           terraform validate
+
+  supply-chain:
+    name: supply chain · dependency review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required to post the summary comment; the API itself is read-only.
+      pull-requests: write
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # Reviews the dependency delta introduced by the PR (not the whole
+      # manifest), so it fails on newly introduced advisories and licence drift.
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          fail-on-severity: high
+          comment-summary-on-pr: on-failure
+
+  secrets:
+    name: secrets · no credentials committed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # full history, so a secret that was later deleted is still caught
+
+      # .gitignore already excludes *.pem/*.key/.env; this covers a secret that
+      # was force-added or written to a tracked file.
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

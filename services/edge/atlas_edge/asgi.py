@@ -32,12 +32,14 @@ Env:
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import os
 import sys
 import time
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
+from atlas_common.auth import current_bearer, resolve_bearer_user_id
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware import Middleware
@@ -90,6 +92,16 @@ os.environ.setdefault("ATLAS_DATABASE_URL", f"sqlite:///{ROOT.replace(os.sep, '/
 
 from atlas_common.config import settings  # noqa: E402
 from atlas_common.db import init_db  # noqa: E402
+from atlas_common.ratelimit import (  # noqa: E402
+    ask_limiter,
+    auth_limiter,
+    client_key,
+    max_body_bytes,
+    max_text_length,
+    rate_limit_enabled,
+    read_limiter,
+    write_limiter,
+)
 from atlas_mcp_server.config import mcp_settings  # noqa: E402
 
 init_db()
@@ -238,6 +250,155 @@ def _capability_report() -> dict:
     }
 
 
+class _BodyTooLarge(Exception):
+    """Raised from the receive wrapper when a chunked body exceeds the ceiling."""
+
+
+async def _send_json(send, status: int, payload: dict, extra_headers=None) -> None:
+    body = json.dumps(payload).encode()
+    headers = [
+        (b"content-type", b"application/json"),
+        (b"content-length", str(len(body)).encode()),
+    ]
+    extra_headers = list(extra_headers or [])
+    # A Retry-After belongs only on 429, and only once. Advertising it on every
+    # response (health checks included) tells well-behaved clients to stall.
+    if status == 429 and not any(k.lower() == b"retry-after" for k, _ in extra_headers):
+        headers.append((b"retry-after", b"1"))
+    headers.extend(extra_headers)
+    await send({"type": "http.response.start", "status": status, "headers": headers})
+    await send({"type": "http.response.body", "body": body})
+
+
+class _Headers:
+    """Minimal request-shaped wrapper so client_key can read a header mapping."""
+
+    __slots__ = ("headers", "client")
+
+    def __init__(self, headers: dict, peer=None) -> None:
+        self.headers = _CaseInsensitive(headers)
+        self.client = peer
+
+
+class _Peer:
+    """Stand-in for request.client carrying the ASGI peer address."""
+
+    __slots__ = ("host",)
+
+    def __init__(self, host: str | None) -> None:
+        self.host = host
+
+
+class _CaseInsensitive:
+    """Read-only, case-insensitive view over raw ASGI header pairs."""
+
+    __slots__ = ("_map",)
+
+    def __init__(self, headers: dict) -> None:
+        self._map = {k.lower(): v for k, v in headers.items()}
+
+    def get(self, name: str, default=None):
+        raw = self._map.get(name.lower().encode())
+        return raw.decode("latin-1") if raw is not None else default
+
+
+async def rate_limit_allowed(limiter, request) -> bool:
+    if not rate_limit_enabled():
+        return True
+    allowed, _retry_after = await limiter.acquire(client_key(request))
+    return allowed
+
+
+async def _mint_dev_token(base: str, user_id: str) -> JSONResponse:
+    """Delegate dev token minting to the finance service, which owns AuthToken."""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            upstream = await client.post(
+                f"{base}/finance/auth/token", json={"user_id": user_id}
+            )
+    except Exception:
+        log.warning("dev token mint failed: finance service unreachable")
+        return JSONResponse({"error": "token service unavailable"}, status_code=503)
+
+    if upstream.status_code != 200:
+        return JSONResponse({"error": "token mint failed"}, status_code=upstream.status_code)
+    return JSONResponse(upstream.json(), status_code=200)
+
+
+class SecurityMiddleware:
+    """Request-size ceiling for every route, including the mounted services.
+
+    Wraps the app so the four mounted services inherit the body guard without
+    each having to add middleware. CORS is layered outside this one so a
+    rejected 413/429 response still carries the headers a browser needs to read
+    it.
+    """
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        limit_bytes = max_body_bytes()
+        headers = dict(scope.get("headers") or ())
+        declared = headers.get(b"content-length")
+        if declared is not None:
+            try:
+                if int(declared) > limit_bytes:
+                    await _send_json(send, 413, {"error": "request body too large"})
+                    return
+            except ValueError:
+                await _send_json(send, 400, {"error": "invalid Content-Length"})
+                return
+
+        # Rate limit here rather than per-handler so the mounted REST services
+        # are covered too, not just the edge's own routes. Read traffic gets the
+        # larger budget; mutating methods get the tighter one. /auth/token and
+        # /api/ask additionally apply their own stricter limiters in-handler.
+        if rate_limit_enabled():
+            method = scope.get("method", "GET")
+            budget = write_limiter if method in {"POST", "PUT", "PATCH", "DELETE"} else read_limiter
+            identity = resolve_bearer_user_id(
+                (headers.get(b"authorization", b"").decode("latin-1").partition(" ")[2] or "").strip()
+            )
+            allowed, retry_after = await budget.acquire(
+                client_key(
+                    _Headers(headers, _Peer(scope.get("client", (None,))[0])), identity
+                )
+            )
+            if not allowed:
+                await _send_json(
+                    send,
+                    429,
+                    {"error": "Too many requests"},
+                    extra_headers=[(b"retry-after", str(retry_after).encode())],
+                )
+                return
+
+        # Content-Length is a client claim: absent on chunked bodies and
+        # trivially understated, so the ceiling is also enforced while reading.
+        received = 0
+
+        async def limited_receive():
+            nonlocal received
+            message = await receive()
+            if message.get("type") == "http.request":
+                received += len(message.get("body", b""))
+                if received > limit_bytes:
+                    raise _BodyTooLarge()
+            return message
+
+        try:
+            await self.app(scope, limited_receive, send)
+        except _BodyTooLarge:
+            await _send_json(send, 413, {"error": "request body too large"})
+
+
 def create_app() -> Starlette:
     finance = _load_service("finance")
     scheduling = _load_service("scheduling")
@@ -288,8 +449,8 @@ def create_app() -> Starlette:
         return JSONResponse({"status": "ok", "service": "atlas-edge"})
 
     class AskIn(BaseModel):
-        utterance: str
-        user_id: str = "u_demo"
+        utterance: str = Field(min_length=1, max_length=max_text_length())
+        user_id: str = Field(min_length=1, max_length=128)
 
     async def ask(request):
         """Drive one natural-language turn through the orchestrator.
@@ -299,15 +460,38 @@ def create_app() -> Starlette:
         local rule-based router and labels the reply as simulated, so the demo
         never implies a live AWS call.
         """
+        if not await rate_limit_allowed(ask_limiter, request):
+            return JSONResponse({"error": "Too many requests"}, status_code=429)
+
         try:
             payload = await request.json()
         except Exception:
             return JSONResponse({"error": "expected a JSON body"}, status_code=400)
 
         try:
-            body = AskIn(**payload)
-        except ValidationError as exc:
-            return JSONResponse({"error": exc.errors()}, status_code=422)
+            # model_validate, not AskIn(**payload): a JSON array or scalar is valid
+            # JSON, and **payload would raise TypeError -> 500 on caller input.
+            body = AskIn.model_validate(payload)
+        except ValidationError:
+            # Report the field names only. exc.errors() embeds the offending input
+            # values and internal type detail, which is unnecessary disclosure.
+            return JSONResponse(
+                {"error": "invalid request body: utterance and user_id are required"},
+                status_code=422,
+            )
+
+        authorization = request.headers.get("authorization", "")
+        scheme, separator, token = authorization.partition(" ")
+        token = token.strip()
+        authenticated_user_id = (
+            resolve_bearer_user_id(token)
+            if scheme.lower() == "bearer" and separator and token
+            else None
+        )
+        if authenticated_user_id is None:
+            return JSONResponse({"error": "Bearer authentication required"}, status_code=401)
+        if body.user_id != authenticated_user_id:
+            return JSONResponse({"error": "User identity does not match token"}, status_code=403)
 
         if not body.utterance.strip():
             return JSONResponse({"error": "utterance must not be empty"}, status_code=422)
@@ -322,13 +506,37 @@ def create_app() -> Starlette:
 
         try:
             # Tool execution is blocking httpx work, so keep it off the loop.
-            result = await run_in_threadpool(_run)
+            context_token = current_bearer.set(token)
+            try:
+                result = await run_in_threadpool(_run)
+            finally:
+                current_bearer.reset(context_token)
         except Exception as exc:
-            log.exception("orchestrator turn failed")
-            return JSONResponse({"error": str(exc)}, status_code=502)
+            log.exception("orchestrator turn failed: %s", type(exc).__name__)
+            return JSONResponse({"error": "orchestrator turn failed"}, status_code=502)
 
         result.setdefault("simulated", bool(settings.mock_bedrock))
         return JSONResponse(result)
+
+    async def auth_token(request):
+        """Dev-mode token minting: the one guessable, credential-shaped route.
+
+        Only reachable when ATLAS_AUTH_MODE=dev (the finance service's own
+        handler 404s in Cognito mode), so this is a demo-path guard, not the
+        production auth mechanism.
+        """
+        if settings.auth_mode != "dev":
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        if not await rate_limit_allowed(auth_limiter, request):
+            return JSONResponse({"error": "Too many requests"}, status_code=429)
+        try:
+            payload = await request.json()
+        except Exception:
+            return JSONResponse({"error": "expected a JSON body"}, status_code=400)
+        user_id = payload.get("user_id") if isinstance(payload, dict) else None
+        if not isinstance(user_id, str) or not user_id or len(user_id) > 128:
+            return JSONResponse({"error": "invalid user_id"}, status_code=422)
+        return await _mint_dev_token(base, user_id)
 
     return Starlette(
         routes=[
@@ -336,6 +544,7 @@ def create_app() -> Starlette:
             Route("/api/capabilities", capabilities),
             Route("/api/ask", ask, methods=["POST"]),
             Route("/edge/health", edge_health),
+            Route("/auth/token", auth_token, methods=["POST"]),
             Mount("/finance", app=finance),
             Mount("/schedule", app=scheduling),
             Mount("/risk", app=risk),
@@ -343,12 +552,15 @@ def create_app() -> Starlette:
         ],
         lifespan=lifespan,
         middleware=[
+            Middleware(SecurityMiddleware),
             Middleware(
                 CORSMiddleware,
                 allow_origins=settings.cors_origins,
-                allow_methods=["*"],
-                allow_headers=["*"],
-            )
+                allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+                allow_headers=["Authorization", "Content-Type"],
+                allow_credentials=False,
+                max_age=600,
+            ),
         ],
     )
 

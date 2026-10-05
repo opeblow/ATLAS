@@ -7,13 +7,26 @@ are the responsibility of the calling services (Section 8.5).
 
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 
+from atlas_common.auth import authenticated_user, current_bearer
+from atlas_common.config import settings
 from app.features import compute_features, generate_aggregate_from_seed
 from app.model import get_model
 
 app = FastAPI(title="ATLAS Risk Model", version="0.1.0")
+
+@app.middleware("http")
+async def forward_auth_context(request, call_next):
+    scheme, separator, token = request.headers.get("authorization", "").partition(" ")
+    context_token = current_bearer.set(
+        token.strip() if scheme.lower() == "bearer" and separator else None
+    )
+    try:
+        return await call_next(request)
+    finally:
+        current_bearer.reset(context_token)
 
 
 class ScoreRequest(BaseModel):
@@ -45,7 +58,7 @@ def health() -> dict:
 
 
 @app.post("/score", response_model=ScoreResponse)
-def score(req: ScoreRequest) -> ScoreResponse:
+def score(req: ScoreRequest, _user_id: str = Depends(authenticated_user)) -> ScoreResponse:
     try:
         model = get_model()
     except FileNotFoundError as exc:
@@ -59,6 +72,8 @@ def score(req: ScoreRequest) -> ScoreResponse:
 @app.get("/score/demo")
 def demo_score() -> ScoreResponse:
     """Score a default (synthetic) aggregate — handy for smoke tests."""
+    if settings.auth_mode != "dev":
+        raise HTTPException(status_code=404, detail="Not found")
     features = compute_features(generate_aggregate_from_seed({}))
     s, factors = get_model().score_with_factors(features)
     return ScoreResponse(score=round(float(s), 4), factors=factors)

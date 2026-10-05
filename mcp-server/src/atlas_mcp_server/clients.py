@@ -16,33 +16,39 @@ from typing import Any
 
 import httpx
 
+from atlas_common.auth import current_bearer
 from atlas_mcp_server.config import mcp_settings
 
 _TIMEOUT = httpx.Timeout(15.0)
 
 
+def _headers() -> dict[str, str]:
+    token = current_bearer.get()
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
 def _post(base: str, path: str, payload: dict[str, Any]) -> dict[str, Any]:
-    r = httpx.post(f"{base}{path}", json=payload, timeout=_TIMEOUT)
+    r = httpx.post(f"{base}{path}", json=payload, headers=_headers(), timeout=_TIMEOUT)
     r.raise_for_status()
     return r.json()
 
 
 def _get(base: str, path: str, **params: Any) -> dict[str, Any]:
-    r = httpx.get(f"{base}{path}", params=params, timeout=_TIMEOUT)
+    r = httpx.get(f"{base}{path}", params=params, headers=_headers(), timeout=_TIMEOUT)
     r.raise_for_status()
     return r.json()
 
 
 async def _post_async(base: str, path: str, payload: dict[str, Any]) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        r = await client.post(f"{base}{path}", json=payload)
+        r = await client.post(f"{base}{path}", json=payload, headers=_headers())
     r.raise_for_status()
     return r.json()
 
 
 async def _get_async(base: str, path: str, **params: Any) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-        r = await client.get(f"{base}{path}", params=params)
+        r = await client.get(f"{base}{path}", params=params, headers=_headers())
     r.raise_for_status()
     return r.json()
 

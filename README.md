@@ -33,12 +33,12 @@ claiming any live Amazon integration.
 
 ## System design and scale-out path
 
-The diagram separates the **runnable demo** from the **scale-out target**. ATLAS
-is not currently proven to serve millions of users: the Render blueprint runs a
-single edge process with SQLite, and the AWS Terraform is a provisioning
-starting point, not a tested high-availability deployment. No sub-10 ms or
-million-user capacity claim is made. See [docs/architecture.md](docs/architecture.md)
-for service boundaries, failure behavior, and production readiness gates.
+The diagram separates the **hardened code path** from the **scale-out target**.
+ATLAS is not currently proven to serve millions of users: the Render demo was
+SQLite-backed, and the AWS Terraform has not been applied, load-tested, or
+validated as a complete high-availability deployment. No million-user capacity
+claim is made. See [docs/architecture.md](docs/architecture.md) for remaining
+production gates.
 
 ```mermaid
 flowchart LR
@@ -53,7 +53,7 @@ flowchart LR
     ORCH --> SCH
   end
 
-  subgraph Target["Scale-out target — requires implementation and load validation"]
+  subgraph Target["Scale-out target — requires deployment and load validation"]
     IN["Managed ingress<br/>WAF · TLS · rate limits"] --> POOL["Stateless service pools<br/>MCP · finance · scheduling · risk"]
     POOL --> CACHE["Shared Redis<br/>bounded TTL · invalidation"]
     POOL --> DB["Managed PostgreSQL<br/>Multi-AZ · PgBouncer · migrations"]
@@ -75,6 +75,14 @@ flowchart LR
 - Ledger writes and schedule commits accept idempotency keys. These protect
   retries, but million-user write safety still needs concurrent database tests
   and a production schema/unique-constraint review.
+- API routes now fail closed on Cognito access-token validation and bind tenant
+  IDs to the token subject. The Cognito SPA uses OAuth authorization code with
+  PKCE; configure the pool, client, callback URL, issuer, and dashboard domain
+  before exposing the service.
+- The Terraform baseline provisions Cognito, encrypted Multi-AZ RDS, Secrets
+  Manager database credentials, and CPU-based ECS task scaling. It is a
+  starting point only: service discovery/ingress, migrations, rate limits,
+  capacity and disaster-recovery behavior still require deployment validation.
 - The Docker Compose stack is for local multi-container development. Its
   Postgres service is a single container, not high availability.
 
@@ -141,18 +149,19 @@ scores are an experimental demonstration, not validated financial advice,
 credit scoring, or a recommendation to buy or borrow. The demo does not connect
 to bank accounts, calendars, or an Alexa+ customer identity.
 
-The hosted keyless demo intentionally exposes a shared synthetic profile and
-disables MCP bearer auth so judges can try it without setup. Do not enter real
-personal or financial data. Enabling MCP bearer auth alone does **not** secure
-the dashboard or the finance/scheduling HTTP APIs; production needs a real
-identity provider and authorization on every public API route.
+Do not enter real personal or financial data into the old hosted demo. The
+repository now configures that deployment to fail closed until Cognito and a
+managed database are supplied. Configure these before expecting its APIs or
+dashboard to work. This change does not retroactively protect data already
+collected by any previous public deployment; rotate credentials and inspect or
+delete any exposed demo data separately.
 
 ---
 
-## Cloud deploy (no API keys)
+## Local development
 
-Backend on **Render**, dashboard on **Cloudflare Pages**, SQLite only. Full steps
-in [docs/deployment.md](docs/deployment.md).
+Deployment notes are in [docs/deployment.md](docs/deployment.md). The previous
+keyless Render configuration is not a production deployment.
 
 The backend is one service because all four backends share one SQLite file;
 `services/edge` mounts them behind a single origin:

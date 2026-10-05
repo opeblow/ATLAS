@@ -5,7 +5,7 @@
   "description": "ATLAS Command Center — money, time, and the agent's work, in one place.",
   "scripts": {
     "dev": "next dev -p 3000",
-    "prebuild": "node scripts/check-backend-url.mjs",
+    "prebuild": "node scripts/build-headers.mjs && node scripts/check-backend-url.mjs",
     "build": "next build",
     "start": "next start -p 3000",
     "typecheck": "tsc --noEmit"
