@@ -3,6 +3,12 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      atlas_url:
+        description: "API origin baked into the dashboard (e.g. https://api.example.com)"
+        required: false
+        type: string
 
 jobs:
   build-python-package:
@@ -11,9 +17,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
 
@@ -23,7 +29,7 @@ jobs:
           python -m build mcp-server
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mcp-server-dist
           path: mcp-server/dist/*
@@ -33,14 +39,48 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [build-python-package]
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: dashboard/package-lock.json
+
+      # NEXT_PUBLIC_* values are inlined into the JS bundle at build time, so the
+      # CSP origin in out/_headers is permanent for this artifact. Resolve it once
+      # here, and fail loudly rather than shipping a bundle pinned to 'self',
+      # which cannot reach a cross-origin API.
+      - name: Resolve API origin
+        id: origin
+        env:
+          ATLAS_URL_INPUT: ${{ inputs.atlas_url }}
+          ATLAS_URL_VAR: ${{ vars.NEXT_PUBLIC_ATLAS_URL }}
+        run: |
+          candidate="${ATLAS_URL_INPUT:-$ATLAS_URL_VAR}"
+          if [ -z "$candidate" ]; then
+            echo "resolved=" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Dashboard API origin not set"
+              echo
+              echo "This artifact was built with \`connect-src 'self'\`, so it will"
+              echo "**not** be able to reach a cross-origin ATLAS API."
+              echo
+              echo "Set the \`NEXT_PUBLIC_ATLAS_URL\` repository variable, or pass"
+              echo "\`atlas_url\` to workflow_dispatch, then rebuild."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=Missing API origin::dashboard CSP limited to connect-src 'self'"
+            exit 0
+          fi
+          origin="$(node -e 'console.log(new URL(process.argv[1]).origin)' "$candidate")" || {
+            echo "::error title=Invalid API origin::$candidate is not a valid URL"
+            exit 1
+          }
+          echo "resolved=$origin" >> "$GITHUB_OUTPUT"
+          echo "API origin baked into the dashboard: $origin" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install
         working-directory: dashboard
@@ -48,14 +88,28 @@ jobs:
 
       - name: Build
         working-directory: dashboard
+        env:
+          NEXT_PUBLIC_ATLAS_URL: ${{ steps.origin.outputs.resolved }}
         run: npm run build
 
+      # Catch the silent fallback here too: build-headers.mjs degrades rather than
+      # throws, so assert the emitted CSP actually names an origin.
+      - name: Verify CSP names the API origin
+        if: steps.origin.outputs.resolved != ''
+        working-directory: dashboard
+        run: |
+          grep -q "connect-src 'self' ${{ steps.origin.outputs.resolved }}" \
+            public/_headers \
+            || { echo "::error::public/_headers does not grant the resolved origin"; exit 1; }
+
       - name: Upload build output
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dashboard-build
           path: |
             dashboard/.next
+            dashboard/out
+            dashboard/public/_headers
             dashboard/package.json
             dashboard/next.config.ts
             dashboard/postcss.config.mjs

@@ -137,10 +137,6 @@ jobs:
 
       - name: Format check
         working-directory: infra/terraform
-        # Advisory only. `terraform validate` below is the real gate; fmt is
-        # cosmetic and blocking on it just stalls a security fix, so a drift
-        # shows up as a warning to tidy in a follow-up.
-        continue-on-error: true
         run: terraform fmt -check -recursive
 
       - name: Validate

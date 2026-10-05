@@ -10,9 +10,19 @@
 # REDIS_URL is set on edge so the limiter counts across all uvicorn workers.
 # Without it each worker keeps a private counter and the effective limit silently
 # multiplies by the worker count.
+#
+# Every service runs with no-new-privileges so a compromised process cannot gain
+# privileges via a setuid binary, and carries a memory/CPU ceiling so one service
+# under load (or a runaway log) cannot starve the host and take the rest of the
+# stack down with it.
+
+x-hardened: &hardened
+  security_opt:
+    - no-new-privileges:true
 
 services:
   postgres:
+    <<: *hardened
     image: postgres:16-alpine
     container_name: atlas-postgres
     restart: always
@@ -26,6 +36,8 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    mem_limit: 1g
+    cpus: "2.0"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U atlas_user -d atlas_prod"]
       interval: 5s
@@ -33,6 +45,7 @@ services:
       retries: 5
 
   redis:
+    <<: *hardened
     image: redis:7-alpine
     container_name: atlas-redis
     restart: always
@@ -41,6 +54,8 @@ services:
     expose:
       - "6379"
     command: ["redis-server", "--save", "", "--appendonly", "no"]
+    mem_limit: 256m
+    cpus: "1.0"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -48,6 +63,7 @@ services:
       retries: 5
 
   risk-model:
+    <<: *hardened
     build:
       context: .
       dockerfile: services/risk-model/Dockerfile
@@ -57,6 +73,10 @@ services:
       - "8000"
     environment:
       - PORT=8000
+    # torch holds the model and its arena resident, so this gets a larger budget
+    # than the plain HTTP services.
+    mem_limit: 2g
+    cpus: "2.0"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -64,6 +84,7 @@ services:
       retries: 3
 
   finance-service:
+    <<: *hardened
     build:
       context: .
       dockerfile: services/finance-service/Dockerfile
@@ -82,6 +103,8 @@ services:
       - RISK_MODEL_URL=http://risk-model:8000
       - ATLAS_AUTH_MODE=dev
       - ATLAS_REQUIRE_AUTH=0
+    mem_limit: 512m
+    cpus: "1.0"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 10s
@@ -89,6 +112,7 @@ services:
       retries: 3
 
   scheduling-service:
+    <<: *hardened
     build:
       context: .
       dockerfile: services/scheduling-service/Dockerfile
@@ -102,6 +126,8 @@ services:
     environment:
       - PORT=8002
       - ATLAS_DATABASE_URL=postgresql://atlas_user:atlas_password@postgres:5432/atlas_prod
+    mem_limit: 512m
+    cpus: "1.0"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
       interval: 10s
@@ -109,6 +135,7 @@ services:
       retries: 3
 
   mcp-server:
+    <<: *hardened
     build:
       context: .
       dockerfile: mcp-server/Dockerfile
@@ -125,6 +152,8 @@ services:
       - PORT=8003
       - FINANCE_SERVICE_URL=http://finance-service:8001
       - SCHEDULING_SERVICE_URL=http://scheduling-service:8002
+    mem_limit: 512m
+    cpus: "1.0"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
       interval: 10s
@@ -134,6 +163,7 @@ services:
   # The single public entrypoint. Every request crosses the security middleware
   # here, so this must sit in front of the four services.
   edge:
+    <<: *hardened
     build:
       context: .
       dockerfile: services/edge/Dockerfile
@@ -167,6 +197,12 @@ services:
       - ATLAS_AUTH_MODE=dev
       - ATLAS_REQUIRE_AUTH=0
       - ATLAS_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+      # Nothing rewrites X-Forwarded-For in this stack, so the raw peer address is
+      # the honest identifier. Leaving this off is what keeps a spoofed header from
+      # handing a caller a fresh rate-limit bucket.
+      - ATLAS_TRUST_PROXY_HEADERS=0
+    mem_limit: 512m
+    cpus: "1.0"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/edge/health"]
       interval: 10s
@@ -174,6 +210,7 @@ services:
       retries: 3
 
   dashboard:
+    <<: *hardened
     build:
       context: ./dashboard
       dockerfile: Dockerfile
@@ -187,6 +224,8 @@ services:
         condition: service_healthy
     ports:
       - "3000:8080" # nginx-unprivileged listens on 8080 inside the container
+    mem_limit: 128m
+    cpus: "0.5"
 
 volumes:
   postgres_data:

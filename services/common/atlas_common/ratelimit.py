@@ -112,25 +112,39 @@ class RateLimiter:
     async def acquire(self, client: str) -> tuple[bool, int]:
         """Shared-counter rate limit when Redis is configured, else `allow`.
 
-        INCR-then-EXPIRE is atomic enough here: the window is a coarse traffic
-        ceiling, so losing the race to set a TTL (both callers setting the same
-        value) is harmless. The counter is expired on every reset of the window.
+        The window is bucketed by wall clock and the bucket is part of the key, so
+        every window gets its own counter and no request can extend the window it
+        lands in. The previous version re-issued EXPIRE on every hit, which
+        quietly turned the ceiling into an inactivity window: a client sending one
+        request every 59s kept resetting the TTL and was never limited at all.
+
+        INCR and EXPIRE go out in one pipeline, which redis-py wraps in
+        MULTI/EXEC, so the TTL always lands on a counter that exists.
         """
         if not _REDIS_ENABLED:
             return self.allow(client)
 
         try:
-            key = f"atlas:rl:{self.name}:{_hash_client(client)}"
-            pipe = _redis_client().pipeline()
+            client_redis = _redis_client()
+            if client_redis is None:
+                # REDIS_URL is set but the client could not be built, e.g. the
+                # optional `redis` extra is not installed. Fails open to the
+                # in-process table rather than raising on every request.
+                return self.allow(client)
+
+            now = int(time.time())
+            bucket = now // self.window
+            key = f"atlas:rl:{self.name}:{_hash_client(client)}:{bucket}"
+            pipe = client_redis.pipeline()
             pipe.incr(key)
-            pipe.expire(key, self.window)
+            pipe.expire(key, self.window + 1)
             count = int(pipe.execute()[0])
         except Exception:
             # Fail open: an unreachable Redis must not take the API down.
             return self.allow(client)
 
         if count > self.limit:
-            return False, self.window
+            return False, max(1, self.window - (now % self.window))
         return True, 0
 
     def reset(self) -> None:
@@ -209,6 +223,19 @@ def client_key(request, authenticated_user_id: str | None = None) -> str:
     request landing on `ip:unknown`, lets one client exhaust the budget for
     everyone). Turn it on only when a proxy you control is known to overwrite the
     header -- Render and Cloudflare both do.
+
+    When it is on, trust the *last* hop, not the first. A proxy appends the peer it
+    received from, so the rightmost entry is the one the proxy observed and the
+    leftmost is whatever the caller sent. Reading the leftmost entry -- which is
+    what this used to do -- meant a client could send `X-Forwarded-For: <random>`
+    and get a fresh rate-limit bucket on every request, defeating the limiter
+    entirely while the flag was on.
+
+    This assumes exactly one trusted hop in front of ATLAS, which is the deployed
+    topology: Render terminates TLS and calls the edge directly. Chain a second
+    proxy (say Cloudflare in front of Render) and the last entry becomes that
+    proxy's address, collapsing anonymous callers onto one bucket; in that case
+    front ATLAS directly instead.
     """
     if authenticated_user_id:
         return f"u:{authenticated_user_id}"
@@ -217,7 +244,8 @@ def client_key(request, authenticated_user_id: str | None = None) -> str:
     if not host:
         host = "unknown"
     if _flag("ATLAS_TRUST_PROXY_HEADERS", "0"):
-        forwarded = request.headers.get("x-forwarded-for", "")
-        if forwarded:
-            return f"ip:{forwarded.split(',')[0].strip()}"
+        hops = [hop.strip() for hop in request.headers.get("x-forwarded-for", "").split(",")]
+        hops = [hop for hop in hops if hop]
+        if hops:
+            return f"ip:{hops[-1]}"
     return f"ip:{host}"

@@ -22,7 +22,7 @@ services:
       pip install --upgrade pip
       && pip install "numpy>=1.26" "torch>=2.2" --index-url https://download.pytorch.org/whl/cpu
       && pip install
-      -e ./services/common
+      -e "./services/common[redis]"
       -e ./services/edge
       -e ./services/finance-service
       -e ./services/scheduling-service
@@ -39,6 +39,20 @@ services:
       # what the internal sub-service calls need. Pinning it to :8000 (as this
       # file previously did) makes every self-call fail whenever Render assigns a
       # different port, with a connection-refused rather than anything obvious.
+
+      # Render terminates TLS and sets X-Forwarded-For itself, so request.client is
+      # the proxy for every request. Without this flag every anonymous caller
+      # shares a single bucket, so one unauthenticated client can exhaust the
+      # /auth/token budget for everyone.
+      - key: ATLAS_TRUST_PROXY_HEADERS
+        value: "1"
+
+      # The shared rate-limit counter. Required once the service runs more than one
+      # instance, since the in-process table is private to each one and would
+      # otherwise multiply every configured limit by the instance count. Safe to
+      # leave unset on the free plan: the limiter fails open to the local table.
+      - key: REDIS_URL
+        sync: false
 
       # Require an external managed Postgres URL; never persist multi-user data
       # on Render's ephemeral filesystem.
