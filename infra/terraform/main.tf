@@ -116,10 +116,10 @@ resource "aws_db_instance" "atlas" {
   db_name                = "atlas"
   username               = var.db_user
   password               = var.db_password
-  multi_az               = true
-  storage_encrypted      = true
+  multi_az                = true
+  storage_encrypted       = true
   backup_retention_period = 7
-  deletion_protection    = true
+  deletion_protection     = true
   vpc_security_group_ids = [aws_security_group.services.id]
   db_subnet_group_name   = aws_db_subnet_group.atlas.name
   skip_final_snapshot    = true
@@ -139,14 +139,14 @@ resource "aws_secretsmanager_secret" "database_url" {
 }
 
 resource "aws_secretsmanager_secret_version" "database_url" {
-  secret_id = aws_secretsmanager_secret.database_url.id
+  secret_id    = aws_secretsmanager_secret.database_url.id
   secret_string = "postgresql+psycopg2://${var.db_user}:${var.db_password}@${aws_db_instance.atlas.endpoint}/atlas"
 }
 
 # ------------------------------------------------------------------ identity
 resource "aws_cognito_user_pool" "atlas" {
-  name                = "${local.name}-users"
-  username_attributes = ["email"]
+  name                     = "${local.name}-users"
+  username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
 
   password_policy {

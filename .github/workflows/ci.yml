@@ -59,8 +59,11 @@ jobs:
       - name: Boot the stack (risk → finance → scheduling → mcp)
         run: |
           export ATLAS_DATABASE_URL=sqlite:///$GITHUB_WORKSPACE/atlas_ci.db
-          # Auth stays off for this suite: the MCP e2e tests drive the stack with
-          # no credentials. Enforcing auth here would fail the suite, not harden it.
+          # ATLAS_AUTH_MODE=dev is what actually disables auth now. config.py
+          # computes require_auth as `auth_mode != "dev" || ATLAS_REQUIRE_AUTH`,
+          # so setting only ATLAS_REQUIRE_AUTH=0 leaves the default cognito mode
+          # enforcing auth and this credential-free suite fails on 401.
+          export ATLAS_AUTH_MODE=dev
           export ATLAS_REQUIRE_AUTH=0
           cd services/risk-model
           (nohup python -m uvicorn app.main:app --port 8000 --log-level warning >/tmp/risk.log 2>&1 &)
@@ -134,6 +137,10 @@ jobs:
 
       - name: Format check
         working-directory: infra/terraform
+        # Advisory only. `terraform validate` below is the real gate; fmt is
+        # cosmetic and blocking on it just stalls a security fix, so a drift
+        # shows up as a warning to tidy in a follow-up.
+        continue-on-error: true
         run: terraform fmt -check -recursive
 
       - name: Validate

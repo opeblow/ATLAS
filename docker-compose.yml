@@ -80,6 +80,7 @@ services:
       - PORT=8001
       - ATLAS_DATABASE_URL=postgresql://atlas_user:atlas_password@postgres:5432/atlas_prod
       - RISK_MODEL_URL=http://risk-model:8000
+      - ATLAS_AUTH_MODE=dev
       - ATLAS_REQUIRE_AUTH=0
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
@@ -160,8 +161,10 @@ services:
       - ATLAS_RISK_MODEL_URL=http://risk-model:8000
       - ATLAS_FINANCE_URL=http://finance-service:8001
       - ATLAS_SCHEDULING_URL=http://scheduling-service:8002
-      # Local convenience stack: auth off. A real deployment sets
-      # ATLAS_AUTH_MODE=cognito and ATLAS_REQUIRE_AUTH=1 (see render.yaml).
+      # ATLAS_REQUIRE_AUTH=0 alone no longer disables auth: config.py computes
+      # require_auth as `auth_mode != "dev" || ATLAS_REQUIRE_AUTH`, so dev mode
+      # must be selected explicitly. A real deployment sets cognito + 1 instead.
+      - ATLAS_AUTH_MODE=dev
       - ATLAS_REQUIRE_AUTH=0
       - ATLAS_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
     healthcheck:
